@@ -38,7 +38,68 @@ def draw_text_center(text, y_offset=0):
 
 running = True
 while running:
-
+    # B. EVENT HANDLING QUEUE
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+
+        # Temporary controls to test our Finite State Machine (FSM)
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_1:
+                current_state = MAIN_MENU
+            elif event.key == pygame.K_2:
+                current_state = DUNGEON_ROOM
+            elif event.key == pygame.K_3:
+                current_state = SHOP_ROOM
+            elif event.key == pygame.K_4:
+                current_state = GAMEOVER_SCREEN
+            elif event.key == pygame.K_5:
+                current_state = VICTORY_SCREEN
+
+    # C. INPUT & GAME LOGIC UPDATE (Only move if in the Dungeon)
+    keys = pygame.key.get_pressed()
+    if current_state == DUNGEON_ROOM:
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            player_rect.x -= player_speed
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            player_rect.x += player_speed
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            player_rect.y -= player_speed
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            player_rect.y += player_speed
+
+        # Keep player within screen bounds
+        player_rect.clamp_ip(screen.get_rect())
+
+    # D. RENDERING
+    # 1. Fill the background based on the current state
+    screen.fill(BG_COLORS[current_state])
+
+    # 2. Draw elements specific to the current state
+    if current_state == MAIN_MENU:
+        draw_text_center("JACK PLOT: MAIN MENU", -20)
+        draw_text_center("(Press 2 for Dungeon)", 20)
+
+    elif current_state == DUNGEON_ROOM:
+        # Draw the player
+        screen.blit(player_surface, player_rect)
+        draw_text_center("DUNGEON ROOM", -150)
+        draw_text_center("(Press 3 for Shop)", -110)
+
+    elif current_state == SHOP_ROOM:
+        draw_text_center("NEON SHOP", -20)
+        draw_text_center("(Press 1 for Menu)", 20)
+
+    elif current_state == GAMEOVER_SCREEN:
+        draw_text_center("GAME OVER", 0)
+
+    elif current_state == VICTORY_SCREEN:
+        draw_text_center("YOU WIN!", 0)
+
+    # E. DISPLAY FLIP & CLOCK TICK
+    pygame.display.flip()  # Update the screen
+    clock.tick(60)  # Limit to 60 FPS
+
+    # CLEANUP (Runs after the while loop exits)
+pygame.quit()
+sys.exit()
