@@ -20,6 +20,9 @@ player_surface = pygame.Surface((50, 50))
 player_surface.fill((0, 255, 150))
 player_rect = player_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
 player_speed = 5
+player_max_health = 100
+player_health = 100
+player_chips = 0
 
 BG_COLORS = {
     MAIN_MENU: (20, 20, 30),
@@ -83,8 +86,12 @@ while running:
     elif current_state == DUNGEON_ROOM:
         # Draw the player
         screen.blit(player_surface, player_rect)
-        draw_text_center("DUNGEON ROOM", -150)
-        draw_text_center("(Press 3 for Shop)", -110)
+        draw_text_center("DUNGEON ROOM", -100)
+        draw_text_center("(Press 3 for Shop)", -60)
+        health_text = font.render(f"Health: {player_health}/{player_max_health}", True, (255, 100, 100))
+        chips_text = font.render(f"Chips: {player_chips}", True, (255, 215, 0))
+        screen.blit(health_text, (20, 20))
+        screen.blit(chips_text, (20, 60))
 
     elif current_state == SHOP_ROOM:
         draw_text_center("NEON SHOP", -20)
