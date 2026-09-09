@@ -17,6 +17,7 @@ COLOR_DIAMOND = (255, 60, 60)
 COLOR_HEART = (255, 100, 150)
 COLOR_SPADE = (180, 70, 255)
 COLOR_CLUB = (50, 220, 120)
+COLOR_LASER = (0, 255, 255)
 
 SUIT_COLORS = {
     "SPADE": COLOR_SPADE,
@@ -84,7 +85,29 @@ class ClubSlash:
                     self.y + math.sin(rad + self.spread) * self.reach)
 
         pygame.draw.polygon(surface, COLOR_CLUB, [origin, left_pt, right_pt])
+class LaserBeam:
+    """Laser beam that lasts 5 seconds (300 frames) and follows player orientation."""
+    def __init__(self, player):
+        self.player = player
+        self.lifetime = 300  # 5 seconds at 60 FPS
+        self.total_damage = 20
+        self.damage_per_frame = self.total_damage / 300
+        self.beam_length = 800
 
+    def update(self):
+        self.lifetime -= 1 
+
+    def draw(self, surface):
+        # Calculate endpoint based on player's current facing angle
+        rad = math.radians(self.player.angle)
+        start_pos = self.player.rect.center
+        end_x = start_pos[0] + math.cos(rad) * self.beam_length
+        end_y = start_pos[1] + math.sin(rad) * self.beam_length
+
+        # Outer glow beam
+        pygame.draw.line(surface, COLOR_LASER, start_pos, (end_x, end_y), 18)
+        # Inner white core beam
+        pygame.draw.line(surface, (255, 255, 255), start_pos, (end_x, end_y), 6)
 
 class Player:
     def __init__(self, x, y):
@@ -161,11 +184,17 @@ class Player:
 player = Player(WIDTH // 2, HEIGHT // 2)
 projectiles = []
 slashes = []
+active_lasers = []
 
 # Hand / Queue Data Structures
 card_hand = []  # Holds maximum of 5 cards
 MAX_HAND_SIZE = 5
 SUITS = ["SPADE", "HEART", "CLUB", "DIAMOND"]
+
+# Laser Charge Tracking Variables
+charge_timer = 0          # Tracks frames held (180 frames = 3 seconds at 60 FPS)
+CHARGE_REQ = 180          # 3 seconds * 60 FPS
+is_charging = False
 
 font = pygame.font.SysFont("Arial", 14, bold=True)
 
@@ -174,7 +203,7 @@ running = True
 while running:
     mouse_pos = pygame.mouse.get_pos()
     keys = pygame.key.get_pressed()
-
+    mouse_buttons = pygame.mouse.get_pressed()
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -184,23 +213,72 @@ while running:
             if len(card_hand) < MAX_HAND_SIZE:
                 card_hand.append(random.choice(SUITS))
 
-        # --- LEFT CLICK: EXECUTE FIRST CARD IN QUEUE ---
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if len(card_hand) > 0:
-                current_card = card_hand.pop(0)  # Use and remove the first card
+        # --- RELEASE LEFT CLICK: EXECUTE SINGLE CARD IF NOT CHARGED ---
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if is_charging and charge_timer < CHARGE_REQ:
+                if len(card_hand) > 0:
+                    current_card = card_hand.pop(0)
 
-                if current_card == "SPADE":
-                    projectiles.append(SpadeProjectile(player.rect.centerx, player.rect.centery, player.angle))
-                elif current_card == "HEART":
-                    player.use_heart_shield()
-                elif current_card == "CLUB":
-                    slashes.append(ClubSlash(player.rect.centerx, player.rect.centery, player.angle))
-                elif current_card == "DIAMOND":
-                    player.use_diamond_dash(keys)
+                    if current_card == "SPADE":
+                        projectiles.append(SpadeProjectile(player.rect.centerx, player.rect.centery, player.angle))
+                    elif current_card == "HEART":
+                        player.use_heart_shield()
+                    elif current_card == "CLUB":
+                        slashes.append(ClubSlash(player.rect.centerx, player.rect.centery, player.angle))
+                    elif current_card == "DIAMOND":
+                        player.use_diamond_dash(keys)
+
+            # Reset charge state on release
+            is_charging = False
+            charge_timer = 0
+
+    # --- HOLD LEFT CLICK CHARGE LASER ---
+    if mouse_buttons[0]:  # Left mouse button held
+        if len(card_hand) >= 4:
+            is_charging = True
+            charge_timer += 1
+
+            # Fully Charged! Fire Laser Combo
+            if charge_timer >= CHARGE_REQ:
+                for _ in range(4):
+                    card_hand.pop(0)
+
+                active_lasers.append(LaserBeam(player))
+                is_charging = False
+                charge_timer = 0
+        else:
+            is_charging = False
+            charge_timer = 0
+
+    # --- HOLD LEFT CLICK CHARGE LASER---
+    if mouse_buttons[0]:  # Left mouse button is currently held down
+        if len(card_hand) >= 4:
+            is_charging = True
+            charge_timer += 1
+
+            # Fully Charged! Fires laser
+            if charge_timer >= CHARGE_REQ:
+                # Consume 4 cards from the queue
+                for _ in range(4):
+                    card_hand.pop(0)
+
+                # Spawn active laser beam
+                active_lasers.append(LaserBeam(player))
+
+                # Reset charging state
+                is_charging = False
+                charge_timer = 0
+    else:
+        # Not enough cards to charge
+        is_charging = False
+        charge_timer = 0
 
     # --- UPDATES ---
     player.update(keys, mouse_pos)
-
+    for laser in active_lasers[:]: 
+        laser.update()
+        if laser.lifetime <= 0:
+            active_lasers.remove(laser)
     for proj in projectiles[:]:
         proj.update()
         if proj.lifetime <= 0 or not screen.get_rect().collidepoint(proj.x, proj.y):
@@ -213,7 +291,9 @@ while running:
 
     # --- RENDERING ---
     screen.fill(COLOR_BG)
-
+    for laser in active_lasers:
+        laser.draw(screen)
+        
     for slash in slashes:
         slash.draw(screen)
 
@@ -226,7 +306,7 @@ while running:
     hud_x = 20
     hud_y = HEIGHT - 70
     
-    # Label
+    # Label and text
     text_surf = font.render("CARD QUEUE (Left Click to Use First):", True, (200, 200, 200))
     screen.blit(text_surf, (hud_x, hud_y - 25))
 
