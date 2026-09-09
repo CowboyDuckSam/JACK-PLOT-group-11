@@ -247,6 +247,6 @@ while running:
 
     pygame.display.flip()
     clock.tick(60)
-
+#end 
 pygame.quit()
 sys.exit()
