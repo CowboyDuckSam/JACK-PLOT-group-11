@@ -89,7 +89,7 @@ class LaserBeam:
     """Laser beam that lasts 5 seconds (300 frames) and follows player orientation."""
     def __init__(self, player):
         self.player = player
-        self.lifetime = 300  # 5 seconds at 60 FPS
+        self.lifetime = 120  # 2 seconds at 60 FPS
         self.total_damage = 20
         self.damage_per_frame = self.total_damage / 300
         self.beam_length = 800
@@ -204,6 +204,7 @@ while running:
     mouse_pos = pygame.mouse.get_pos()
     keys = pygame.key.get_pressed()
     mouse_buttons = pygame.mouse.get_pressed()
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -213,9 +214,9 @@ while running:
             if len(card_hand) < MAX_HAND_SIZE:
                 card_hand.append(random.choice(SUITS))
 
-        # --- RELEASE LEFT CLICK: EXECUTE SINGLE CARD IF NOT CHARGED ---
+        # --- RELEASE LEFT CLICK: EXECUTE SINGLE CARD IF NOT CHARGING & NO LASER ACTIVE ---
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            if is_charging and charge_timer < CHARGE_REQ:
+            if len(active_lasers) == 0 and is_charging and charge_timer < CHARGE_REQ:
                 if len(card_hand) > 0:
                     current_card = card_hand.pop(0)
 
@@ -232,6 +233,27 @@ while running:
             is_charging = False
             charge_timer = 0
 
+    # --- HOLD LEFT CLICK CHARGE LASER ---
+    if mouse_buttons[0] and len(active_lasers) == 0:  # Only allow charge if NO laser is firing
+        if len(card_hand) >= 4:
+            is_charging = True
+            charge_timer += 1
+
+            # Fully Charged! Fire Laser Combo
+            if charge_timer >= CHARGE_REQ:
+                for _ in range(4):
+                    card_hand.pop(0)
+
+                active_lasers.append(LaserBeam(player))
+                is_charging = False
+                charge_timer = 0
+        else:
+            is_charging = False
+            charge_timer = 0
+    else:
+        if len(active_lasers) > 0:
+            is_charging = False
+            charge_timer = 0
     # --- HOLD LEFT CLICK CHARGE LASER ---
     if mouse_buttons[0]:  # Left mouse button held
         if len(card_hand) >= 4:
@@ -293,7 +315,7 @@ while running:
     screen.fill(COLOR_BG)
     for laser in active_lasers:
         laser.draw(screen)
-        
+
     for slash in slashes:
         slash.draw(screen)
 
