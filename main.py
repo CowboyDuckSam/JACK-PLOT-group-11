@@ -2,7 +2,7 @@ import sys
 import pygame
 
 pygame.init()
-WIDTH, HEIGHT = 800, 400
+WIDTH, HEIGHT = 960, 540
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("JACK PLOT!!!")
 clock = pygame.time.Clock()
@@ -116,6 +116,6 @@ while running:
     pygame.display.flip()  # Update the screen
     clock.tick(60)  # Limit to 60 FPS
 
-    # CLEANUP (Runs after the while loop exits)
+    # CLEANUP (Runs aftear the while loop exits)
 pygame.quit()
 sys.exit()
