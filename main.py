@@ -23,6 +23,9 @@ player_speed = 5
 player_max_health = 100
 player_health = 100
 player_chips = 0
+player_deck = []  # To tracks the active cards Jack holds
+wall_rect = pygame.Rect(500, 100, 50, 200)  # A placeholder obstacle (x, y, width, height)
+
 
 BG_COLORS = {
     MAIN_MENU: (20, 20, 30),
@@ -62,6 +65,8 @@ while running:
     # C. INPUT & GAME LOGIC UPDATE (Only move if in the Dungeon)
     keys = pygame.key.get_pressed()
     if current_state == DUNGEON_ROOM:
+        old_x, old_y = player_rect.x, player_rect.y
+
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             player_rect.x -= player_speed
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
@@ -73,6 +78,9 @@ while running:
 
         # Keep player within screen bounds
         player_rect.clamp_ip(screen.get_rect())
+
+        if player_rect.colliderect(wall_rect):
+            player_rect.x, player_rect.y = old_x, old_y
 
     # D. RENDERING
     # 1. Fill the background based on the current state
@@ -86,6 +94,7 @@ while running:
     elif current_state == DUNGEON_ROOM:
         # Draw the player
         screen.blit(player_surface, player_rect)
+        pygame.draw.rect(screen, (100, 100, 100), wall_rect)
         draw_text_center("DUNGEON ROOM", -100)
         draw_text_center("(Press 3 for Shop)", -60)
         health_text = font.render(f"Health: {player_health}/{player_max_health}", True, (255, 100, 100))
