@@ -18,6 +18,8 @@ COLOR_HEART = (255, 100, 150)
 COLOR_SPADE = (180, 70, 255)
 COLOR_CLUB = (50, 220, 120)
 COLOR_LASER = (0, 255, 255)
+COLOR_TOKEN_OUTER = (140, 20, 220)
+COLOR_TOKEN_INNER = (255, 215, 0)
 
 SUIT_COLORS = {
     "SPADE": COLOR_SPADE,
@@ -108,6 +110,34 @@ class LaserBeam:
         pygame.draw.line(surface, COLOR_LASER, start_pos, (end_x, end_y), 18)
         # Inner white core beam
         pygame.draw.line(surface, (255, 255, 255), start_pos, (end_x, end_y), 6)
+class Token:
+    """Gambling chip token dropped by enemies."""
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 8
+        self.rect = pygame.Rect(x - self.radius, y - self.radius, self.radius * 2, self.radius * 2)
+        # Random initial scatter velocity
+        self.vx = random.uniform(-2, 2)
+        self.vy = random.uniform(-2, 2)
+        self.friction = 0.90
+
+    def update(self):
+        # Move and gradually slow down (scatter effect)
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= self.friction
+        self.vy *= self.friction
+        self.rect.center = (int(self.x), int(self.y))
+
+    def draw(self, surface):
+        pos = (int(self.x), int(self.y))
+        # Outer purple chip body
+        pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, self.radius)
+        # Inner yellow/gold ring (gambling chip look)
+        pygame.draw.circle(surface, COLOR_TOKEN_INNER, pos, self.radius - 3)
+        # Center purple dot
+        pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, 2)
 
 class Player:
     def __init__(self, x, y):
@@ -185,6 +215,8 @@ player = Player(WIDTH // 2, HEIGHT // 2)
 projectiles = []
 slashes = []
 active_lasers = []
+tokens = []
+player_tokens = 0
 
 # Hand / Queue Data Structures
 card_hand = []  # Holds maximum of 5 cards
@@ -296,6 +328,12 @@ while running:
         charge_timer = 0
 
     # --- UPDATES ---
+    # Update tokens & check player collection
+    for token in tokens[:]:
+        token.update()
+        if player.rect.colliderect(token.rect):
+            player_tokens += 1
+            tokens.remove(token)
     player.update(keys, mouse_pos)
     for laser in active_lasers[:]: 
         laser.update()
@@ -320,6 +358,9 @@ while running:
         slash.draw(screen)
 
     player.draw(screen)
+
+    for token in tokens:
+        token.draw(screen)
 
     for proj in projectiles:
         proj.draw(screen)
@@ -346,7 +387,17 @@ while running:
 
     # Draw Mouse Cursor
     pygame.draw.circle(screen, (255, 255, 255), mouse_pos, 5, width=1)
-
+    # --- DRAW TOKEN COUNTER (TOP-RIGHT) ---
+    token_str = f"TOKENS: {player_tokens}"
+    token_surf = font.render(token_str, True, COLOR_TOKEN_INNER)
+    token_rect = token_surf.get_rect(topright=(WIDTH - 20, 20))
+    
+    # Draw dark background box for top-right counter
+    bg_box = token_rect.inset(-6, -4)
+    pygame.draw.rect(screen, (10, 10, 20), bg_box, border_radius=4)
+    pygame.draw.rect(screen, COLOR_TOKEN_OUTER, bg_box, width=2, border_radius=4)
+    screen.blit(token_surf, token_rect)
+    
     pygame.display.flip()
     clock.tick(60)
 #end 
