@@ -1,5 +1,7 @@
 import sys
 import pygame
+from wheel import FateWheel
+
 
 pygame.init()
 WIDTH, HEIGHT = 960, 540
@@ -15,16 +17,23 @@ GAMEOVER_SCREEN = "GAMEOVER_SCREEN"
 VICTORY_SCREEN = "VICTORY_SCREEN"
 
 current_state = MAIN_MENU
+fate_wheel = FateWheel()
+
 
 player_surface = pygame.Surface((50, 50))
 player_surface.fill((0, 255, 150))
 player_rect = player_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-player_speed = 5
+player_speed = 300
+player_pos_x = float(player_rect.x)
+player_pos_y = float(player_rect.y)
 player_max_health = 100
 player_health = 100
 player_chips = 0
 player_deck = []  # To tracks the active cards Jack holds
 wall_rect = pygame.Rect(500, 100, 50, 200)  # A placeholder obstacle (x, y, width, height)
+shop_dice_result = 1
+shop_message = "Welcome! 10 Chips to roll the die."
+
 
 
 BG_COLORS = {
@@ -42,6 +51,7 @@ def draw_text_center(text, y_offset=0):
     screen.blit(text_surface, text_rect)
 
 
+dt = 0
 running = True
 while running:
     # B. EVENT HANDLING QUEUE
@@ -62,27 +72,55 @@ while running:
             elif event.key == pygame.K_5:
                 current_state = VICTORY_SCREEN
 
+            # For the fate wheel
+            if current_state == DUNGEON_ROOM:
+                if event.key == pygame.K_r and not fate_wheel.active:
+                    fate_wheel.open()
+
+                elif event.key == pygame.K_SPACE and fate_wheel.active and not fate_wheel.spinning and fate_wheel.result_index is None:
+                    fate_wheel.start_spin()
+
+                elif event.key == pygame.K_RETURN and fate_wheel.active and fate_wheel.result_index is not None:
+                    fate_wheel.close()
+
     # C. INPUT & GAME LOGIC UPDATE (Only move if in the Dungeon)
     keys = pygame.key.get_pressed()
     if current_state == DUNGEON_ROOM:
-        old_x, old_y = player_rect.x, player_rect.y
 
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            player_rect.x -= player_speed
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            player_rect.x += player_speed
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            player_rect.y -= player_speed
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            player_rect.y += player_speed
+        if fate_wheel.active:
+            fate_wheel.update(dt)
 
-        # Keep player within screen bounds
-        player_rect.clamp_ip(screen.get_rect())
+            if not fate_wheel.spinning and fate_wheel.result_index is not None and not fate_wheel.result_applied:
+                result = fate_wheel.apply_result(player_chips, player_deck)
+                if result:
+                    label, player_chips = result  # Update the chips
 
-        if player_rect.colliderect(wall_rect):
-            player_rect.x, player_rect.y = old_x, old_y
+        else:
+            old_x, old_y = player_pos_x, player_pos_y
+
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                player_pos_x -= player_speed * dt
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                player_pos_x += player_speed * dt
+            if keys[pygame.K_UP] or keys[pygame.K_w]:
+                player_pos_y -= player_speed * dt
+            if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                player_pos_y += player_speed * dt
+
+            # Keep player within screen bounds
+            player_rect.x = int(player_pos_x)
+            player_rect.y = int(player_pos_y)
+
+            map_bounds = pygame.Rect(0, 0, 2000, 2000)
+            player_rect.clamp_ip(map_bounds)
+            player_pos_x, player_pos_y = float(player_rect.x), float(player_rect.y)
+
+            if player_rect.colliderect(wall_rect):
+                player_pos_x, player_pos_y = old_x, old_y
+                player_rect.x, player_rect.y = int(player_pos_x), int(player_pos_y)
 
     # D. RENDERING
+
     # 1. Fill the background based on the current state
     screen.fill(BG_COLORS[current_state])
 
@@ -92,15 +130,35 @@ while running:
         draw_text_center("(Press 2 for Dungeon)", 20)
 
     elif current_state == DUNGEON_ROOM:
-        # Draw the player
-        screen.blit(player_surface, player_rect)
-        pygame.draw.rect(screen, (100, 100, 100), wall_rect)
-        draw_text_center("DUNGEON ROOM", -100)
-        draw_text_center("(Press 3 for Shop)", -60)
+        # 1. cam offset
+        cam_x = player_rect.centerx - (WIDTH // 2)
+        cam_y = player_rect.centery - (HEIGHT // 2)
+
+        # Keep camera inside the 2000x2000 map bounds
+        cam_x = max(0, min(cam_x, 2000 - WIDTH))
+        cam_y = max(0, min(cam_y, 2000 - HEIGHT))
+
+        # 2.  draw the world
+        floor_rect = pygame.Rect(0 - cam_x, 0 - cam_y, 2000, 2000)
+        pygame.draw.rect(screen, (20, 30, 20), floor_rect)
+
+        # Shift the wall by the camera offset
+        offset_wall = wall_rect.move(-cam_x, -cam_y)
+        pygame.draw.rect(screen, (100, 100, 100), offset_wall)
+
+        # Shift the player by the camera offset
+        offset_player = player_rect.move(-cam_x, -cam_y)
+        screen.blit(player_surface, offset_player)
+
+        # 3. draw UI (no offsets, so it sticks to the screen)
         health_text = font.render(f"Health: {player_health}/{player_max_health}", True, (255, 100, 100))
         chips_text = font.render(f"Chips: {player_chips}", True, (255, 215, 0))
         screen.blit(health_text, (20, 20))
         screen.blit(chips_text, (20, 60))
+
+        # Draw the FateWheel on top of everything!
+        fate_wheel.draw(screen, font)
+
 
     elif current_state == SHOP_ROOM:
         draw_text_center("NEON SHOP", -20)
@@ -114,8 +172,9 @@ while running:
 
     # E. DISPLAY FLIP & CLOCK TICK
     pygame.display.flip()  # Update the screen
-    clock.tick(60)  # Limit to 60 FPS
+    dt = clock.tick(60) / 1000.0  # Limit to 60 FPS AND calculate Delta Time!
 
-    # CLEANUP (Runs aftear the while loop exits)
+
+    # CLEANUP (Runs after the while loop exits)
 pygame.quit()
 sys.exit()
