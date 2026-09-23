@@ -1,4 +1,4 @@
-# this is for the Wheele
+# this is for the Wheel
 
 import math
 import random
@@ -7,10 +7,10 @@ import pygame
 class FateWheel:
     SECTORS = [
         ("SPEED BOOST", "stat_multiplier", ("speed", 1.5, 8.0)),
-        ("CHIP LOSS", "chip_loss", None),
+        ("Token LOSS", "token_loss", None),
         ("CARD UPGRADE", "card_upgrade", None),
         ("HEALTH BOOST", "stat_multiplier", ("max_health", 1.2, 8.0)),
-        ("CHIP LOSS", "chip_loss", None),
+        ("Token LOSS", "token_loss", None),
         ("CARD UPGRADE", "card_upgrade", None),
     ]
     SECTOR_ANGLE = 360 / len(SECTORS)
@@ -51,20 +51,20 @@ class FateWheel:
             pointer_relative_angle = (360 - self.angle) % 360
             self.result_index = int(pointer_relative_angle // self.SECTOR_ANGLE)
 
-    def apply_result(self, player_chips, player_deck):
+    def apply_result(self, player_tokens, player_deck):
             if self.result_applied or self.result_index is None: return
 
             label, outcome_type, payload = self.SECTORS[self.result_index]
 
-            if outcome_type == "chip_loss":
-                player_chips = 0
+            if outcome_type == "token_loss":
+                player_tokens = 0
 
             elif outcome_type == "card_upgrade":
                 if len(player_deck) < 5:
                     player_deck.append(random.choice(["SPADE", "HEART", "CLUB", "DIAMOND"]))
 
             self.result_applied = True
-            return label, player_chips
+            return label, player_tokens
 
     def draw(self, screen, font):
             if not self.active: return

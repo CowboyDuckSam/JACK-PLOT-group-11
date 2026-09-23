@@ -28,11 +28,29 @@ player_pos_x = float(player_rect.x)
 player_pos_y = float(player_rect.y)
 player_max_health = 100
 player_health = 100
-player_chips = 0
+player_tokens = 0
 player_deck = []  # To tracks the active cards Jack holds
-wall_rect = pygame.Rect(500, 100, 50, 200)  # A placeholder obstacle (x, y, width, height)
 shop_dice_result = 1
-shop_message = "Welcome! 10 Chips to roll the die."
+shop_message = "Welcome! 10 Tokens to roll the die."
+current_floor = 1
+minions_killed = 0
+minions_total = 10
+boss_spawned = False
+
+# Dungeon Walls
+dungeon_walls = [
+    # outer map borders
+    pygame.Rect(0, 0, 2000, 50),
+    pygame.Rect(0, 0, 50, 2000),
+    pygame.Rect(1950, 0, 50, 2000),
+    pygame.Rect(0, 1950, 2000, 50),
+
+    # inner Obstacles and Cover
+    pygame.Rect(500, 500, 300, 50),
+    pygame.Rect(1200, 800, 50, 400),
+    pygame.Rect(400, 1200, 200, 200),
+    pygame.Rect(1500, 300, 150, 150),
+]
 
 
 
@@ -91,9 +109,9 @@ while running:
             fate_wheel.update(dt)
 
             if not fate_wheel.spinning and fate_wheel.result_index is not None and not fate_wheel.result_applied:
-                result = fate_wheel.apply_result(player_chips, player_deck)
+                result = fate_wheel.apply_result(player_tokens, player_deck)
                 if result:
-                    label, player_chips = result  # Update the chips
+                    label, player_tokens = result  # Update the tokens
 
         else:
             old_x, old_y = player_pos_x, player_pos_y
@@ -115,9 +133,11 @@ while running:
             player_rect.clamp_ip(map_bounds)
             player_pos_x, player_pos_y = float(player_rect.x), float(player_rect.y)
 
-            if player_rect.colliderect(wall_rect):
-                player_pos_x, player_pos_y = old_x, old_y
-                player_rect.x, player_rect.y = int(player_pos_x), int(player_pos_y)
+
+            for wall in dungeon_walls:
+                if player_rect.colliderect(wall):
+                    player_pos_x, player_pos_y = old_x, old_y
+                    player_rect.x, player_rect.y = int(player_pos_x), int(player_pos_y)
 
     # D. RENDERING
 
@@ -143,8 +163,9 @@ while running:
         pygame.draw.rect(screen, (20, 30, 20), floor_rect)
 
         # Shift the wall by the camera offset
-        offset_wall = wall_rect.move(-cam_x, -cam_y)
-        pygame.draw.rect(screen, (100, 100, 100), offset_wall)
+        for wall in dungeon_walls:
+            offset_wall = wall.move(-cam_x, -cam_y)
+            pygame.draw.rect(screen, (100, 100, 100), offset_wall)
 
         # Shift the player by the camera offset
         offset_player = player_rect.move(-cam_x, -cam_y)
@@ -152,9 +173,9 @@ while running:
 
         # 3. draw UI (no offsets, so it sticks to the screen)
         health_text = font.render(f"Health: {player_health}/{player_max_health}", True, (255, 100, 100))
-        chips_text = font.render(f"Chips: {player_chips}", True, (255, 215, 0))
+        tokens_text = font.render(f"Token: {player_tokens}", True, (255, 215, 0))
         screen.blit(health_text, (20, 20))
-        screen.blit(chips_text, (20, 60))
+        screen.blit(tokens_text, (20, 60))
 
         # Draw the FateWheel on top of everything!
         fate_wheel.draw(screen, font)
