@@ -15,7 +15,7 @@ COLOR_BG = (20, 15, 30)
 COLOR_PLAYER = (240, 240, 240)
 COLOR_DIAMOND = (255, 60, 60)
 COLOR_HEART = (255, 100, 150)
-COLOR_SPADE = (180, 70, 255)
+COLOR_SPADE = (180, 70, 255) 
 COLOR_CLUB = (50, 220, 120)
 COLOR_LASER = (0, 255, 255)
 COLOR_TOKEN_OUTER = (140, 20, 220)
@@ -111,23 +111,37 @@ class LaserBeam:
         # Inner white core beam
         pygame.draw.line(surface, (255, 255, 255), start_pos, (end_x, end_y), 6)
 class Token:
-    """Gambling chip token dropped by enemies."""
+    """token with scatter and magnetic attraction mechanics."""
     def __init__(self, x, y):
         self.x = x
         self.y = y
         self.radius = 8
         self.rect = pygame.Rect(x - self.radius, y - self.radius, self.radius * 2, self.radius * 2)
-        # Random initial scatter velocity
-        self.vx = random.uniform(-2, 2)
-        self.vy = random.uniform(-2, 2)
-        self.friction = 0.90
+        
+        # Initial scatter burst velocity when dropping
+        self.vx = random.uniform(-4, 4)
+        self.vy = random.uniform(-4, 4)
+        self.friction = 0.88  # Slows down initial scatter
+        
+        # Magnetism Parameters
+        self.magnet_distance = 150  # Pull distance in pixels
+        self.magnet_speed = 0.8     # Acceleration toward Jack
 
-    def update(self):
-        # Move and gradually slow down (scatter effect)
+    def update(self, player_rect):
+        dx = player_rect.centerx - self.x
+        dy = player_rect.centery - self.y
+        dist = math.hypot(dx, dy)
+
+        # MAGNETIC EFFECT: Pull token toward Jack if inside range
+        if dist < self.magnet_distance and dist > 0:
+            self.vx += (dx / dist) * self.magnet_speed
+            self.vy += (dy / dist) * self.magnet_speed
+        else:
+            self.vx *= self.friction
+            self.vy *= self.friction
+
         self.x += self.vx
         self.y += self.vy
-        self.vx *= self.friction
-        self.vy *= self.friction
         self.rect.center = (int(self.x), int(self.y))
 
     def draw(self, surface):
@@ -265,45 +279,6 @@ while running:
             is_charging = False
             charge_timer = 0
 
-    # --- HOLD LEFT CLICK CHARGE LASER ---
-    if mouse_buttons[0] and len(active_lasers) == 0:  # Only allow charge if NO laser is firing
-        if len(card_hand) >= 4:
-            is_charging = True
-            charge_timer += 1
-
-            # Fully Charged! Fire Laser Combo
-            if charge_timer >= CHARGE_REQ:
-                for _ in range(4):
-                    card_hand.pop(0)
-
-                active_lasers.append(LaserBeam(player))
-                is_charging = False
-                charge_timer = 0
-        else:
-            is_charging = False
-            charge_timer = 0
-    else:
-        if len(active_lasers) > 0:
-            is_charging = False
-            charge_timer = 0
-    # --- HOLD LEFT CLICK CHARGE LASER ---
-    if mouse_buttons[0]:  # Left mouse button held
-        if len(card_hand) >= 4:
-            is_charging = True
-            charge_timer += 1
-
-            # Fully Charged! Fire Laser Combo
-            if charge_timer >= CHARGE_REQ:
-                for _ in range(4):
-                    card_hand.pop(0)
-
-                active_lasers.append(LaserBeam(player))
-                is_charging = False
-                charge_timer = 0
-        else:
-            is_charging = False
-            charge_timer = 0
-
     # --- HOLD LEFT CLICK CHARGE LASER---
     if mouse_buttons[0]:  # Left mouse button is currently held down
         if len(card_hand) >= 4:
@@ -328,9 +303,9 @@ while running:
         charge_timer = 0
 
     # --- UPDATES ---
-    # Update tokens & check player collection
+   # Update Tokens & Player Collection (Pass player.rect for magnetism)
     for token in tokens[:]:
-        token.update()
+        token.update(player.rect)
         if player.rect.colliderect(token.rect):
             player_tokens += 1
             tokens.remove(token)
@@ -358,6 +333,13 @@ while running:
         slash.draw(screen)
 
     player.draw(screen)
+    # --- DRAW CHARGING INDICATOR CIRCLE ---
+    if is_charging and charge_timer > 0:
+        charge_ratio = charge_timer / CHARGE_REQ
+        pygame.draw.circle(screen, (80, 80, 80), player.rect.center, 36, width=2)
+        fill_radius = int(36 * charge_ratio)
+        if fill_radius > 0:
+            pygame.draw.circle(screen, COLOR_LASER, player.rect.center, fill_radius, width=2)  
 
     for token in tokens:
         token.draw(screen)
