@@ -393,7 +393,7 @@ while running:
     token_rect = token_surf.get_rect(topright=(WIDTH - 20, 20))
     
     # Draw dark background box for top-right counter
-    bg_box = token_rect.inset(-6, -4)
+    bg_box = token_rect.inflate(12, 8)
     pygame.draw.rect(screen, (10, 10, 20), bg_box, border_radius=4)
     pygame.draw.rect(screen, COLOR_TOKEN_OUTER, bg_box, width=2, border_radius=4)
     screen.blit(token_surf, token_rect)
