@@ -1,35 +1,26 @@
 import sys
 import pygame
 from wheel import FateWheel
-
+from settings import *
+from player import Player
+from save_system import LoginManager
 
 pygame.init()
-WIDTH, HEIGHT = 960, 540
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("JACK PLOT!!!")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("Arial", 36)
 
-MAIN_MENU = "MAIN_MENU"
-DUNGEON_ROOM = "DUNGEON_ROOM"
-SHOP_ROOM = "SHOP_ROOM"
-GAMEOVER_SCREEN = "GAMEOVER_SCREEN"
-VICTORY_SCREEN = "VICTORY_SCREEN"
 
-current_state = MAIN_MENU
+current_state = LOGIN_SCREEN
+login_manager = LoginManager(font, WIDTH, HEIGHT)
+char_select_step = "gender"
+selected_gender = None
 fate_wheel = FateWheel()
 
 
-player_surface = pygame.Surface((50, 50))
-player_surface.fill((0, 255, 150))
-player_rect = player_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-player_speed = 300
-player_pos_x = float(player_rect.x)
-player_pos_y = float(player_rect.y)
-player_max_health = 100
-player_health = 100
-player_tokens = 0
-player_deck = []  # To tracks the active cards Jack holds
+
+player = Player(WIDTH // 2, HEIGHT // 2)
 shop_dice_result = 1
 shop_message = "Welcome! 10 Tokens to roll the die."
 current_floor = 1
@@ -37,30 +28,6 @@ minions_killed = 0
 minions_total = 10
 boss_spawned = False
 
-# Dungeon Walls
-dungeon_walls = [
-    # outer map borders
-    pygame.Rect(0, 0, 2000, 50),
-    pygame.Rect(0, 0, 50, 2000),
-    pygame.Rect(1950, 0, 50, 2000),
-    pygame.Rect(0, 1950, 2000, 50),
-
-    # inner Obstacles and Cover
-    pygame.Rect(500, 500, 300, 50),
-    pygame.Rect(1200, 800, 50, 400),
-    pygame.Rect(400, 1200, 200, 200),
-    pygame.Rect(1500, 300, 150, 150),
-]
-
-
-
-BG_COLORS = {
-    MAIN_MENU: (20, 20, 30),
-    DUNGEON_ROOM: (10, 40, 10),
-    SHOP_ROOM: (40, 10, 40),
-    GAMEOVER_SCREEN: (50, 0, 0),
-    VICTORY_SCREEN: (50, 50, 0),
-}
 
 
 def draw_text_center(text, y_offset=0):
@@ -77,6 +44,15 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
+        if current_state == LOGIN_SCREEN:
+            login_manager.handle_input(event)
+            if login_manager.logged_in:
+                # LOAD THE SAVED TOKENS AND WHATNOT
+
+                player.tokens = login_manager.saved_data["tokens"]
+                current_floor = login_manager.saved_data["floor"]
+                current_state = CHAR_SELECT
+
         # Temporary controls to test our Finite State Machine (FSM)
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_1:
@@ -90,7 +66,7 @@ while running:
             elif event.key == pygame.K_5:
                 current_state = VICTORY_SCREEN
 
-            # For the fate wheel
+                # For the fate wheel
             if current_state == DUNGEON_ROOM:
                 if event.key == pygame.K_r and not fate_wheel.active:
                     fate_wheel.open()
@@ -101,6 +77,44 @@ while running:
                 elif event.key == pygame.K_RETURN and fate_wheel.active and fate_wheel.result_index is not None:
                     fate_wheel.close()
 
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # left click
+                mx, my = event.pos
+
+                if current_state == CHAR_SELECT:
+                    if char_select_step == "gender":
+                        if pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 30, 200, 40).collidepoint(mx, my):
+                            selected_gender = "Male"
+                            char_select_step = "skin"
+
+                        elif pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 20, 200, 40).collidepoint(mx, my):
+                            selected_gender = "Female"
+                            char_select_step = "skin"
+
+                    elif char_select_step == "skin":
+                        for i in range(3):
+                            box_x = (WIDTH // 2) - 150 + (i * 125)
+                            box_y = (HEIGHT // 2) - 30
+
+                            if pygame.Rect(box_x, box_y, 60, 60).collidepoint(mx, my):
+                                color = SKIN_OPTIONS[selected_gender][i]
+                                player.surface.fill(color)
+
+                                # Draw eyes
+                                pygame.draw.circle(player.surface, (0, 0, 0), (15, 20), 5)
+                                pygame.draw.circle(player.surface, (0, 0, 0), (35, 20), 5)
+
+                                # Gender details
+                                if selected_gender == "Female":
+                                    pygame.draw.circle(player.surface, (255, 105, 180), (10, 28), 4)
+
+                                elif selected_gender == "Male":
+                                    pygame.draw.rect(player.surface, (0, 0, 0), (20, 35, 10, 3))
+
+                                current_state = MAIN_MENU
+
+
+
     # C. INPUT & GAME LOGIC UPDATE (Only move if in the Dungeon)
     keys = pygame.key.get_pressed()
     if current_state == DUNGEON_ROOM:
@@ -109,50 +123,57 @@ while running:
             fate_wheel.update(dt)
 
             if not fate_wheel.spinning and fate_wheel.result_index is not None and not fate_wheel.result_applied:
-                result = fate_wheel.apply_result(player_tokens, player_deck)
+                result = fate_wheel.apply_result(player.tokens, player.deck)
                 if result:
-                    label, player_tokens = result  # Update the tokens
+                    label, player.tokens = result  # Update the tokens
 
         else:
-            old_x, old_y = player_pos_x, player_pos_y
-
-            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-                player_pos_x -= player_speed * dt
-            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-                player_pos_x += player_speed * dt
-            if keys[pygame.K_UP] or keys[pygame.K_w]:
-                player_pos_y -= player_speed * dt
-            if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-                player_pos_y += player_speed * dt
-
-            # Keep player within screen bounds
-            player_rect.x = int(player_pos_x)
-            player_rect.y = int(player_pos_y)
-
-            map_bounds = pygame.Rect(0, 0, 2000, 2000)
-            player_rect.clamp_ip(map_bounds)
-            player_pos_x, player_pos_y = float(player_rect.x), float(player_rect.y)
-
-
-            for wall in dungeon_walls:
-                if player_rect.colliderect(wall):
-                    player_pos_x, player_pos_y = old_x, old_y
-                    player_rect.x, player_rect.y = int(player_pos_x), int(player_pos_y)
+            player.update(dt, keys, dungeon_walls)
 
     # D. RENDERING
 
-    # 1. Fill the background based on the current state
+    # Fill the background based on the current state
     screen.fill(BG_COLORS[current_state])
 
-    # 2. Draw elements specific to the current state
+    if current_state == LOGIN_SCREEN:
+        login_manager.draw(screen)
+
+    # write text specific to the current state
+    if current_state == CHAR_SELECT:
+        if char_select_step == "gender":
+            draw_text_center("CREATE YOUR AVATAR", -80)
+
+            # Draw Male button (blue)
+            pygame.draw.rect(screen, (50, 150, 255), (WIDTH // 2 - 100, HEIGHT // 2 - 30, 200, 40))
+            draw_text_center("MALE", -10)
+
+            # Draw Female button (pink)
+            pygame.draw.rect(screen, (255, 105, 180), (WIDTH // 2 - 100, HEIGHT // 2 + 20, 200, 40))
+            draw_text_center("FEMALE", 40)
+
+        elif char_select_step == "skin":
+            draw_text_center(f"{selected_gender} Selected. Choose a Skin:", -120)
+
+            skins = SKIN_OPTIONS[selected_gender]
+            for i, color in enumerate(skins):
+                box_x = (WIDTH // 2) - 150 + (i * 125)
+                box_y = (HEIGHT // 2) - 30
+
+                pygame.draw.rect(screen, color, (box_x, box_y, 60, 60))
+                num_text = font.render(str(i + 1), True, (255, 255, 255))
+                screen.blit(num_text, (box_x + 20, box_y + 80))
+
+            draw_text_center("Click a skin to select", 150)
+
+
     if current_state == MAIN_MENU:
         draw_text_center("JACK PLOT: MAIN MENU", -20)
         draw_text_center("(Press 2 for Dungeon)", 20)
 
     elif current_state == DUNGEON_ROOM:
         # 1. cam offset
-        cam_x = player_rect.centerx - (WIDTH // 2)
-        cam_y = player_rect.centery - (HEIGHT // 2)
+        cam_x = player.rect.centerx - (WIDTH // 2)
+        cam_y = player.rect.centery - (HEIGHT // 2)
 
         # Keep camera inside the 2000x2000 map bounds
         cam_x = max(0, min(cam_x, 2000 - WIDTH))
@@ -168,12 +189,12 @@ while running:
             pygame.draw.rect(screen, (100, 100, 100), offset_wall)
 
         # Shift the player by the camera offset
-        offset_player = player_rect.move(-cam_x, -cam_y)
-        screen.blit(player_surface, offset_player)
+        offset_player = player.rect.move(-cam_x, -cam_y)
+        screen.blit(player.surface, offset_player)
 
         # 3. draw UI (no offsets, so it sticks to the screen)
-        health_text = font.render(f"Health: {player_health}/{player_max_health}", True, (255, 100, 100))
-        tokens_text = font.render(f"Token: {player_tokens}", True, (255, 215, 0))
+        health_text = font.render(f"Health: {player.health}/{player.max_health}", True, (255, 100, 100))
+        tokens_text = font.render(f"Token: {player.tokens}", True, (255, 215, 0))
         screen.blit(health_text, (20, 20))
         screen.blit(tokens_text, (20, 60))
 
