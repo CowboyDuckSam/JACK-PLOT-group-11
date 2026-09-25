@@ -4,6 +4,8 @@ from wheel import FateWheel
 from settings import *
 from player import Player
 from save_system import LoginManager
+from environment import DungeonEnvironment
+from shop import NeonShop
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -11,14 +13,13 @@ pygame.display.set_caption("JACK PLOT!!!")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("Arial", 36)
 
-
 current_state = LOGIN_SCREEN
 login_manager = LoginManager(font, WIDTH, HEIGHT)
 char_select_step = "gender"
 selected_gender = None
 fate_wheel = FateWheel()
-
-
+env = DungeonEnvironment(WIDTH, HEIGHT)
+neon_shop = NeonShop(font, WIDTH, HEIGHT)
 
 player = Player(WIDTH // 2, HEIGHT // 2)
 shop_dice_result = 1
@@ -27,7 +28,6 @@ current_floor = 1
 minions_killed = 0
 minions_total = 10
 boss_spawned = False
-
 
 
 def draw_text_center(text, y_offset=0):
@@ -48,7 +48,6 @@ while running:
             login_manager.handle_input(event)
             if login_manager.logged_in:
                 # LOAD THE SAVED TOKENS AND WHATNOT
-
                 player.tokens = login_manager.saved_data["tokens"]
                 current_floor = login_manager.saved_data["floor"]
                 current_state = CHAR_SELECT
@@ -66,7 +65,7 @@ while running:
             elif event.key == pygame.K_5:
                 current_state = VICTORY_SCREEN
 
-                # For the fate wheel
+            # For the fate wheel & Cheat Keys
             if current_state == DUNGEON_ROOM:
                 if event.key == pygame.K_r and not fate_wheel.active:
                     fate_wheel.open()
@@ -76,6 +75,27 @@ while running:
 
                 elif event.key == pygame.K_RETURN and fate_wheel.active and fate_wheel.result_index is not None:
                     fate_wheel.close()
+
+                # --- CHEAT KEYS ---
+                elif event.key == pygame.K_k and not boss_spawned:
+                    minions_killed += 1
+                    player.tokens += 5
+
+                    # NEW: Open the Fate Wheel every 5 kills!
+                    if minions_killed % 5 == 0 and not fate_wheel.active:
+                        fate_wheel.open()
+
+                    if minions_killed >= minions_total:
+                        boss_spawned = True
+
+                elif event.key == pygame.K_b and boss_spawned:
+                    player.tokens += 75
+                    boss_spawned = False
+                    minions_killed = 0
+                    current_floor += 1
+                    minions_total = current_floor * 10
+                    login_manager.save_progress(player.tokens, current_floor)
+                    current_state = SHOP_ROOM
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # left click
@@ -90,6 +110,11 @@ while running:
                         elif pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 20, 200, 40).collidepoint(mx, my):
                             selected_gender = "Female"
                             char_select_step = "skin"
+
+                elif current_state == SHOP_ROOM:
+                    action = neon_shop.handle_click(mx, my, player)
+                    if action == "NEXT_FLOOR":
+                        current_state = DUNGEON_ROOM
 
                     elif char_select_step == "skin":
                         for i in range(3):
@@ -107,26 +132,22 @@ while running:
                                 # Gender details
                                 if selected_gender == "Female":
                                     pygame.draw.circle(player.surface, (255, 105, 180), (10, 28), 4)
-
+                                    pygame.draw.circle(player.surface, (255, 105, 180), (40, 28),
+                                                       4)  # Added right cheek!
                                 elif selected_gender == "Male":
                                     pygame.draw.rect(player.surface, (0, 0, 0), (20, 35, 10, 3))
 
                                 current_state = MAIN_MENU
 
-
-
     # C. INPUT & GAME LOGIC UPDATE (Only move if in the Dungeon)
     keys = pygame.key.get_pressed()
     if current_state == DUNGEON_ROOM:
-
         if fate_wheel.active:
             fate_wheel.update(dt)
-
             if not fate_wheel.spinning and fate_wheel.result_index is not None and not fate_wheel.result_applied:
                 result = fate_wheel.apply_result(player.tokens, player.deck)
                 if result:
                     label, player.tokens = result  # Update the tokens
-
         else:
             player.update(dt, keys, dungeon_walls)
 
@@ -139,7 +160,7 @@ while running:
         login_manager.draw(screen)
 
     # write text specific to the current state
-    if current_state == CHAR_SELECT:
+    elif current_state == CHAR_SELECT:
         if char_select_step == "gender":
             draw_text_center("CREATE YOUR AVATAR", -80)
 
@@ -165,8 +186,7 @@ while running:
 
             draw_text_center("Click a skin to select", 150)
 
-
-    if current_state == MAIN_MENU:
+    elif current_state == MAIN_MENU:
         draw_text_center("JACK PLOT: MAIN MENU", -20)
         draw_text_center("(Press 2 for Dungeon)", 20)
 
@@ -179,9 +199,8 @@ while running:
         cam_x = max(0, min(cam_x, 2000 - WIDTH))
         cam_y = max(0, min(cam_y, 2000 - HEIGHT))
 
-        # 2.  draw the world
-        floor_rect = pygame.Rect(0 - cam_x, 0 - cam_y, 2000, 2000)
-        pygame.draw.rect(screen, (20, 30, 20), floor_rect)
+        # 2. draw the world
+        env.draw_background(screen, current_floor, cam_x, cam_y)
 
         # Shift the wall by the camera offset
         for wall in dungeon_walls:
@@ -192,19 +211,23 @@ while running:
         offset_player = player.rect.move(-cam_x, -cam_y)
         screen.blit(player.surface, offset_player)
 
-        # 3. draw UI (no offsets, so it sticks to the screen)
-        health_text = font.render(f"Health: {player.health}/{player.max_health}", True, (255, 100, 100))
-        tokens_text = font.render(f"Token: {player.tokens}", True, (255, 215, 0))
-        screen.blit(health_text, (20, 20))
-        screen.blit(tokens_text, (20, 60))
+        # Shift the player by the camera offset
+        offset_player = player.rect.move(-cam_x, -cam_y)
+        screen.blit(player.surface, offset_player)
 
-        # Draw the FateWheel on top of everything!
+        # 3. draw UI
+        env.draw_custom_ui(screen, current_floor, font, player.health, player.max_health, player.tokens, minions_killed,
+                           minions_total, boss_spawned)
+
+        # Draw the FateWheel on top of everything
         fate_wheel.draw(screen, font)
 
+        # Draw the FateWheel on top of everything
+        fate_wheel.draw(screen, font)
 
     elif current_state == SHOP_ROOM:
-        draw_text_center("NEON SHOP", -20)
-        draw_text_center("(Press 1 for Menu)", 20)
+        neon_shop.draw(screen, player)
+
 
     elif current_state == GAMEOVER_SCREEN:
         draw_text_center("GAME OVER", 0)
@@ -213,10 +236,8 @@ while running:
         draw_text_center("YOU WIN!", 0)
 
     # E. DISPLAY FLIP & CLOCK TICK
-    pygame.display.flip()  # Update the screen
-    dt = clock.tick(60) / 1000.0  # Limit to 60 FPS AND calculate Delta Time!
+    pygame.display.flip()
+    dt = clock.tick(60) / 1000.0
 
-
-    # CLEANUP (Runs after the while loop exits)
 pygame.quit()
 sys.exit()

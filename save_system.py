@@ -73,6 +73,7 @@ class LoginManager:
             self.saved_data = new_account
 
     def draw(self, screen):
+
         # Draw message
         msg_surf = self.font.render(self.message, True, (255, 255, 100))
         screen.blit(msg_surf, msg_surf.get_rect(center=(self.width // 2, self.height // 2 - 100)))
@@ -91,4 +92,19 @@ class LoginManager:
         # Instructions
         inst = self.font.render("Press TAB to switch fields | ENTER to Login", True, (200, 200, 200))
         screen.blit(inst, inst.get_rect(center=(self.width // 2, self.height // 2 + 120)))
+
+    def save_progress(self, tokens, floor):
+        if not self.logged_in:
+            return
+
+        # Load the file, update this user, and write it back
+        with open(SAVE_FILE, "r") as f:
+            users = json.load(f)
+
+        users[self.username]["tokens"] = tokens
+        users[self.username]["floor"] = floor
+
+        with open(SAVE_FILE, "w") as f:
+            json.dump(users, f)
+        print("Game Saved!")
 

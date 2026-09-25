@@ -1,7 +1,7 @@
 import pygame
 
 # DISPLAY
-WIDTH, HEIGHT = 960, 540
+WIDTH, HEIGHT = 1600, 900
 
 
 # GAME STATES
