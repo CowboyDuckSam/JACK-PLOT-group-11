@@ -1,4 +1,3 @@
-
 import json
 import os
 import pygame
@@ -29,18 +28,14 @@ class LoginManager:
             if event.key == pygame.K_RETURN:
                 self.attempt_login()
             elif event.key == pygame.K_TAB:
-
                 # Swap between typing in Username and Password
                 self.active_field = "password" if self.active_field == "username" else "username"
-
             elif event.key == pygame.K_BACKSPACE:
                 if self.active_field == "username":
                     self.username = self.username[:-1]
                 else:
                     self.password = self.password[:-1]
-
             else:
-
                 # type normal letters
                 if event.unicode.isprintable() and len(event.unicode) > 0:
                     if self.active_field == "username":
@@ -56,16 +51,15 @@ class LoginManager:
         with open(SAVE_FILE, "r") as f:
             users = json.load(f)
 
-
         if self.username in users:
             if users[self.username]["password"] == self.password:
                 self.logged_in = True
                 self.saved_data = users[self.username]
-
             else:
                 self.message = "Incorrect Password!"
         else:
-            new_account = {"password": self.password, "tokens": 0, "floor": 1}
+            # NEW: Add max_health and health to new accounts!
+            new_account = {"password": self.password, "tokens": 0, "floor": 1, "max_health": 100, "health": 100}
             users[self.username] = new_account
             with open(SAVE_FILE, "w") as f:
                 json.dump(users, f)
@@ -73,7 +67,6 @@ class LoginManager:
             self.saved_data = new_account
 
     def draw(self, screen):
-
         # Draw message
         msg_surf = self.font.render(self.message, True, (255, 255, 100))
         screen.blit(msg_surf, msg_surf.get_rect(center=(self.width // 2, self.height // 2 - 100)))
@@ -93,7 +86,8 @@ class LoginManager:
         inst = self.font.render("Press TAB to switch fields | ENTER to Login", True, (200, 200, 200))
         screen.blit(inst, inst.get_rect(center=(self.width // 2, self.height // 2 + 120)))
 
-    def save_progress(self, tokens, floor):
+    # NEW: Now takes 'player' object to save all stats at once
+    def save_progress(self, player, floor):
         if not self.logged_in:
             return
 
@@ -101,10 +95,11 @@ class LoginManager:
         with open(SAVE_FILE, "r") as f:
             users = json.load(f)
 
-        users[self.username]["tokens"] = tokens
+        users[self.username]["tokens"] = player.tokens
         users[self.username]["floor"] = floor
+        users[self.username]["max_health"] = player.max_health
+        users[self.username]["health"] = player.health
 
         with open(SAVE_FILE, "w") as f:
             json.dump(users, f)
-        print("Game Saved!")
-
+        print("Checkpoint Auto-Saved!")
