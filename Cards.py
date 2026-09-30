@@ -49,10 +49,32 @@ SUIT_COLORS = {
     "DIAMOND": COLOR_DIAMOND
 }
 
+# --- PROCEDURAL SOUND GENERATOR ---
+def generate_tone(frequency, duration, volume=0.3):
+    """Generates retro square-wave sound effects in memory."""
+    sample_rate = 44100
+    n_samples = int(sample_rate * duration)
+    buf = array.array('h')
+    for i in range(n_samples):
+        t = float(i) / sample_rate
+        value = 32767 if (int(t * frequency * 2) % 2 == 0) else -32767
+        buf.append(int(value * volume))
+    return pygame.mixer.Sound(buffer=buf)
+
+# Sound Effects Assignment
+SOUND_SPADE = generate_tone(800, 0.08)    # High short pew
+SOUND_CLUB = generate_tone(220, 0.12)     # Low melee whoosh
+SOUND_HEART = generate_tone(523, 0.25)    # Shield hum
+SOUND_DIAMOND = generate_tone(1000, 0.1)  # High dash zip
+SOUND_LASER = generate_tone(150, 0.4)     # Deep laser rumble
+
 # --- CUSTOM TIMERS & EVENTS ---
 # Trigger event every 500 milliseconds (0.5 seconds)
 SPAWN_CARD_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(SPAWN_CARD_EVENT, 500)
+
+SPAWN_ENEMY_EVENT = pygame.USEREVENT + 2
+pygame.time.set_timer(SPAWN_ENEMY_EVENT, 2000)
 
 # 2. GAME CLASSES
 
