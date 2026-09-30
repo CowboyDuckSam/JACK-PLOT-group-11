@@ -5,6 +5,29 @@ import pygame
 #changed a bit to fix some bugs and to look more tidy and easier for me to work on
 # 1. INITIALIZATION & SETUP
 pygame.init()
+
+# Initialize audio engine
+pygame.mixer.init(frequency=44100, size=-16, channels=1)
+
+def generate_tone(frequency, duration, volume=0.3):
+    """Generates a procedural square-wave sound in memory."""
+    sample_rate = 44100
+    n_samples = int(sample_rate * duration)
+    buf = array.array('h')
+    for i in range(n_samples):
+        # Generate square wave
+        t = float(i) / sample_rate
+        value = 32767 if (int(t * frequency * 2) % 2 == 0) else -32767
+        buf.append(int(value * volume))
+    return pygame.mixer.Sound(buffer=buf)
+
+# Create Sound Effects for Each Ability
+SOUND_SPADE = generate_tone(800, 0.08)    # High short pew
+SOUND_CLUB = generate_tone(220, 0.12)     # Low melee whoosh
+SOUND_HEART = generate_tone(523, 0.25)    # Shield hum
+SOUND_DIAMOND = generate_tone(1000, 0.1)  # High dash zip
+SOUND_LASER = generate_tone(150, 0.4)     # Deep laser rumble
+
 WIDTH, HEIGHT = 960, 540
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("JACK PLOT")
