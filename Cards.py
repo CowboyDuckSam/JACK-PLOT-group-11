@@ -154,6 +154,23 @@ class LaserBeam:
         # Inner white core beam
         pygame.draw.line(surface, (255, 255, 255), start_pos, (end_x, end_y), 6)
 
+class Token:
+    """Gambling chip token with scatter and magnetic attraction mechanics."""
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 8
+        self.rect = pygame.Rect(x - self.radius, y - self.radius, self.radius * 2, self.radius * 2)
+        
+        # Initial scatter burst velocity when dropping
+        self.vx = random.uniform(-4, 4)
+        self.vy = random.uniform(-4, 4)
+        self.friction = 0.88  # Slows down initial scatter
+        
+        # Magnetism Parameters
+        self.magnet_distance = 150  # Pull distance in pixels
+        self.magnet_speed = 0.8     # Acceleration toward Jack
+
 class Player:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 32, 32)
@@ -170,6 +187,18 @@ class Player:
         dx = mouse_pos[0] - self.rect.centerx
         dy = mouse_pos[1] - self.rect.centery
         self.angle = math.degrees(math.atan2(dy, dx))
+
+        # MAGNETIC EFFECT: Pull token toward Jack if inside range
+        if dist < self.magnet_distance and dist > 0:
+            self.vx += (dx / dist) * self.magnet_speed
+            self.vy += (dy / math.dist) * self.magnet_speed
+        else:
+            self.vx *= self.friction
+            self.vy *= self.friction
+            
+        self.x += self.vx
+        self.y += self.vy
+        self.rect.center = (int(self.x), int(self.y))
 
         if self.is_dashing:
             self.rect.x += self.dash_dir.x * self.dash_speed
