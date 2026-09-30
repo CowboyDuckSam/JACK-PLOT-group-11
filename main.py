@@ -357,8 +357,9 @@ while running:
             flash_surf.fill((255, 0, 0, 150))
             screen.blit(flash_surf, offset_player)
 
+        # PASS THE PLAYER INTO THE UI SO IT CAN READ THE DECK
         env.draw_custom_ui(screen, current_floor, font, player.health, player.max_health, player.tokens, minions_killed,
-                           minions_total, boss_spawned)
+                           minions_total, boss_spawned, player)
 
         if current_state == DUNGEON_ROOM:
             fate_wheel.draw(screen, font)

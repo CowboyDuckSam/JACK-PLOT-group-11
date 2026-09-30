@@ -52,7 +52,7 @@ class DungeonEnvironment:
         screen.blit(self.floors[safe_floor], (-cam_x, -cam_y))
 
     def draw_custom_ui(self, screen, floor, font, health, max_health, tokens, minions_killed, minions_total,
-                       boss_spawned):
+                       boss_spawned, player_ref=None):
         safe_floor = min(floor, 4)
 
         # themed UI Panels
@@ -79,6 +79,38 @@ class DungeonEnvironment:
             screen.blit(font.render(f"Minions: {minions_killed}/{minions_total}", True, (255, 255, 255)), (25, 140))
         else:
             screen.blit(font.render("BOSS SPAWNED (B)", True, (255, 50, 50)), (25, 140))
+
+        # Complete Deck UI
+        if player_ref is not None:
+            # We define his colors locally so your environment can draw them perfectly[cite: 1, 2]
+            suit_colors = {
+                "SPADE": (180, 70, 255),
+                "HEART": (255, 100, 150),
+                "CLUB": (50, 220, 120),
+                "DIAMOND": (255, 60, 60)
+            }
+
+            # Grab the deck from the player (Fate Wheel uses player.deck)
+            player_deck = getattr(player_ref, "deck", [])
+
+            hud_x = 25
+            hud_y = 230
+
+            small_font = pygame.font.SysFont("Arial", 14, bold=True)
+            screen.blit(small_font.render("CARD QUEUE:", True, (200, 200, 200)), (hud_x, hud_y - 20))
+
+            # Draw exactly like Student 2's code[cite: 1, 2]
+            for idx, suit in enumerate(player_deck):
+                box_rect = pygame.Rect(hud_x + (idx * 60), hud_y, 50, 50)
+                card_color = suit_colors.get(suit, (255, 255, 255))
+
+                # Highlight first card in line[cite: 1, 2]
+                border_width = 4 if idx == 0 else 1
+                pygame.draw.rect(screen, card_color, box_rect, width=border_width, border_radius=6)
+
+                # Render text name inside card[cite: 1, 2]
+                card_txt = small_font.render(suit[:4], True, card_color)
+                screen.blit(card_txt, (box_rect.x + 5, box_rect.y + 16))
 
     # new function for a cool game over/victory popup
     def draw_end_screen(self, screen, font, is_victory):
