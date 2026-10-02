@@ -8,12 +8,27 @@ from save_system import LoginManager
 from environment import DungeonEnvironment
 from shop import NeonShop
 from audio_manager import AudioManager
+from combat import SpadeProjectile, ClubSlash, LaserBeam, Token
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("JACK PLOT!!!")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("Arial", 36)
+
+# --- COMBAT TRACKING & TIMERS ---
+SPAWN_CARD_EVENT = pygame.USEREVENT + 1
+pygame.time.set_timer(SPAWN_CARD_EVENT, 500)
+SUITS = ["SPADE", "HEART", "CLUB", "DIAMOND"]
+
+projectiles = []
+slashes = []
+active_lasers = []
+dropped_tokens = []
+
+charge_timer = 0.0
+CHARGE_REQ = 3.0
+is_charging = False
 
 # starting right at the boot menu
 current_state = START_MENU
@@ -68,12 +83,33 @@ while running:
         if current_state == LOGIN_SCREEN:
             login_manager.handle_input(event)
             if login_manager.logged_in:
-                # safe load: grabs saved health or defaults to 100 for older saves
                 player.tokens = login_manager.saved_data.get("tokens", 0)
                 current_floor = login_manager.saved_data.get("floor", 1)
                 player.max_health = login_manager.saved_data.get("max_health", 100)
                 player.health = login_manager.saved_data.get("health", 100)
                 current_state = CHAR_SELECT
+
+        # --- TIMER EVENT: GENERATE CARD EVERY 0.5 SECONDS ---
+        if event.type == SPAWN_CARD_EVENT and current_state == DUNGEON_ROOM:
+            if len(player.deck) < getattr(player, "MAX_HAND_SIZE", 5):
+                player.deck.append(random.choice(SUITS))
+
+        # --- RELEASE LEFT CLICK: EXECUTE SINGLE CARD IF NOT CHARGING ---
+        if current_state == DUNGEON_ROOM and event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if not fate_wheel.active and len(active_lasers) == 0 and is_charging and charge_timer < CHARGE_REQ:
+                if len(player.deck) > 0:
+                    current_card = player.deck.pop(0)
+                    if current_card == "SPADE":
+                        projectiles.append(SpadeProjectile(player.rect.centerx, player.rect.centery, player.angle))
+                    elif current_card == "HEART":
+                        player.use_heart_shield()
+                    elif current_card == "CLUB":
+                        slashes.append(ClubSlash(player.rect.centerx, player.rect.centery, player.angle))
+                    elif current_card == "DIAMOND":
+                        player.use_diamond_dash(pygame.key.get_pressed())
+
+            is_charging = False
+            charge_timer = 0
 
         # dev test keys
         if event.type == pygame.KEYDOWN:
@@ -92,8 +128,6 @@ while running:
             elif event.key == pygame.K_h and current_state == DUNGEON_ROOM:
                 player.health -= 25
                 audio.play_sfx("jack_hurt")
-
-                # trigger the game juice!
                 shake_timer = 0.3
                 flash_timer = 0.15
 
@@ -107,9 +141,11 @@ while running:
                 elif event.key == pygame.K_k and not boss_spawned:
                     minions_killed += 1
                     player.tokens += 5
+                    # Drop a physical magnetic token for testing
+                    dropped_tokens.append(Token(player.rect.centerx + random.randint(-50, 50),
+                                                player.rect.centery + random.randint(-50, 50)))
                     audio.play_sfx("enemy_hit")
 
-                    # open wheel every 5 kills
                     if minions_killed % 5 == 0 and not fate_wheel.active:
                         audio.play_sfx("wheel_open")
                         fate_wheel.open()
@@ -127,11 +163,9 @@ while running:
                     minions_total = current_floor * 10
                     audio.play_sfx("boss_dead")
 
-                    # check if they beat the whole game
                     if current_floor > 4:
                         current_state = VICTORY_SCREEN
                     else:
-                        # checkpoint 1: beating the boss (only save if not a guest)
                         if not is_guest:
                             login_manager.save_progress(player, current_floor)
                         current_state = SHOP_ROOM
@@ -141,7 +175,6 @@ while running:
             if event.button == 1:
                 mx, my = event.pos
 
-                # boot screen clicks
                 if current_state == START_MENU:
                     if pygame.Rect(WIDTH // 2 - 150, HEIGHT // 2 - 50, 300, 50).collidepoint(mx, my):
                         audio.play_sfx("click")
@@ -152,13 +185,10 @@ while running:
                         is_guest = False
                         current_state = LOGIN_SCREEN
 
-                # picking a floor on the map
                 elif current_state == LEVEL_SELECT:
                     for i in range(4):
                         floor_num = i + 1
                         btn = pygame.Rect(WIDTH // 2 - 250 + (i * 130), HEIGHT // 2 - 40, 100, 80)
-
-                        # only let them click the floor they are currently on
                         if btn.collidepoint(mx, my) and floor_num == current_floor:
                             audio.play_sfx("enter_dungeon")
                             current_state = DUNGEON_ROOM
@@ -183,43 +213,27 @@ while running:
                                 color = SKIN_OPTIONS[selected_gender][i]
                                 player.surface.fill(color)
 
-                                # draw base eyes
                                 pygame.draw.circle(player.surface, (0, 0, 0), (15, 20), 5)
                                 pygame.draw.circle(player.surface, (0, 0, 0), (35, 20), 5)
 
-                                # gender details
                                 if selected_gender == "Female":
-                                    # cute eyelashes
                                     pygame.draw.line(player.surface, (0, 0, 0), (10, 18), (5, 12), 2)
                                     pygame.draw.line(player.surface, (0, 0, 0), (40, 18), (45, 12), 2)
-
-                                    # pink blush
                                     pygame.draw.circle(player.surface, (255, 105, 180), (10, 28), 4)
                                     pygame.draw.circle(player.surface, (255, 105, 180), (40, 28), 4)
-
-                                    # red lips
                                     pygame.draw.ellipse(player.surface, (200, 20, 50), (20, 32, 10, 6))
-
-                                    # little red bow in the hair (top right)
                                     pygame.draw.polygon(player.surface, (220, 20, 20), [(35, 8), (45, 0), (45, 16)])
                                     pygame.draw.polygon(player.surface, (220, 20, 20), [(35, 8), (25, 0), (25, 16)])
                                     pygame.draw.circle(player.surface, (180, 0, 0), (35, 8), 4)
 
                                 elif selected_gender == "Male":
-                                    # thick, determined eyebrows
                                     pygame.draw.line(player.surface, (0, 0, 0), (8, 12), (18, 16), 3)
                                     pygame.draw.line(player.surface, (0, 0, 0), (42, 12), (32, 16), 3)
-
-                                    # rugged brown beard covering the bottom
                                     pygame.draw.rect(player.surface, (60, 40, 20), (5, 33, 40, 15))
-
-                                    # little mustache
                                     pygame.draw.rect(player.surface, (60, 40, 20), (15, 28, 20, 4))
 
-                                # straight to the floor map
                                 current_state = LEVEL_SELECT
 
-                # clicking the wheel in the dungeon
                 elif current_state == DUNGEON_ROOM:
                     if fate_wheel.active:
                         audio.play_sfx("click")
@@ -229,26 +243,22 @@ while running:
                     action = neon_shop.handle_click(mx, my, player)
                     if action == "NEXT_FLOOR":
                         audio.play_sfx("enter_dungeon")
-                        # checkpoint 2: leaving the shop (only save if not a guest)
                         if not is_guest:
                             login_manager.save_progress(player, current_floor)
                         current_state = LEVEL_SELECT
                     elif action:
-                        # play a cha-ching sound if they bought something!
                         audio.play_sfx("buy_item")
 
-                # restart the run when clicking on a game over or victory screen
                 elif current_state in (GAMEOVER_SCREEN, VICTORY_SCREEN):
                     audio.play_sfx("click_restart")
-                    # wipe all temporary stats
                     player.health = 100
                     player.max_health = 100
                     player.tokens = 0
                     current_floor = 1
                     minions_killed = 0
                     boss_spawned = False
+                    player.deck.clear()
 
-                    # wipe the save file so they can't cheat death
                     if not is_guest:
                         login_manager.save_progress(player, current_floor)
 
@@ -262,24 +272,56 @@ while running:
 
     keys = pygame.key.get_pressed()
     if current_state == DUNGEON_ROOM:
-        # checking if dead
         if player.health <= 0:
             current_state = GAMEOVER_SCREEN
+
+        cam_x = max(0, min(player.rect.centerx - (WIDTH // 2), 2000 - WIDTH))
+        cam_y = max(0, min(player.rect.centery - (HEIGHT // 2), 2000 - HEIGHT))
 
         if fate_wheel.active:
             fate_wheel.update(dt)
             if not fate_wheel.spinning and fate_wheel.result_index is not None and not fate_wheel.result_applied:
-                # pass just the tokens if using your custom wheel, adjust if needed
                 result = fate_wheel.apply_result(player.tokens, getattr(player, "deck", []))
                 if result:
                     label, player.tokens = result
         else:
-            player.update(dt, keys, dungeon_walls)
+            # --- HOLD LEFT CLICK CHARGE LASER ---
+            mouse_buttons = pygame.mouse.get_pressed()
+            if mouse_buttons[0]:
+                if len(player.deck) >= 4:
+                    is_charging = True
+                    charge_timer += dt
+                    if charge_timer >= CHARGE_REQ:
+                        for _ in range(4): player.deck.pop(0)
+                        active_lasers.append(LaserBeam(player))
+                        is_charging = False
+                        charge_timer = 0
+            else:
+                is_charging = False
+                charge_timer = 0
+
+            # Update Player Movement and Aiming
+            player.update(dt, keys, dungeon_walls, pygame.mouse.get_pos(), cam_x, cam_y)
+
+            # Update Projectiles and Combat Tracking
+            for laser in active_lasers[:]:
+                laser.update()
+                if laser.lifetime <= 0: active_lasers.remove(laser)
+            for proj in projectiles[:]:
+                proj.update()
+                if proj.lifetime <= 0: projectiles.remove(proj)
+            for slash in slashes[:]:
+                slash.update()
+                if slash.lifetime <= 0: slashes.remove(slash)
+            for t in dropped_tokens[:]:
+                t.update(player.rect)
+                if player.rect.colliderect(t.rect):
+                    player.tokens += 1
+                    dropped_tokens.remove(t)
 
     # rendering
     screen.fill(BG_COLORS.get(current_state, (0, 0, 0)))
 
-    # drawing the boot menu
     if current_state == START_MENU:
         draw_text_center("JACK PLOT", -120)
 
@@ -312,7 +354,6 @@ while running:
                 screen.blit(num_text, (box_x + 20, box_y + 80))
             draw_text_center("Click a skin to select", 150)
 
-    # drawing the floor map
     elif current_state == LEVEL_SELECT:
         draw_text_center("SELECT FLOOR", -120)
 
@@ -320,7 +361,6 @@ while running:
             floor_num = i + 1
             btn = pygame.Rect(WIDTH // 2 - 250 + (i * 130), HEIGHT // 2 - 40, 100, 80)
 
-            # colors based on progress (green = done, yellow = current, red = locked)
             if floor_num < current_floor:
                 color = (50, 200, 50)
             elif floor_num == current_floor:
@@ -333,11 +373,9 @@ while running:
             screen.blit(font.render(f"F{floor_num}", True, (255, 255, 255)), (btn.x + 30, btn.y + 20))
 
     elif current_state in (DUNGEON_ROOM, GAMEOVER_SCREEN, VICTORY_SCREEN):
-        # we calculate camera and draw the dungeon for all three states so it stays in the background when you die!
         cam_x = max(0, min(player.rect.centerx - (WIDTH // 2), 2000 - WIDTH))
         cam_y = max(0, min(player.rect.centery - (HEIGHT // 2), 2000 - HEIGHT))
 
-        # add camera shake offset if the timer is active
         if shake_timer > 0:
             cam_x += random.randint(-8, 8)
             cam_y += random.randint(-8, 8)
@@ -348,21 +386,37 @@ while running:
             offset_wall = wall.move(-cam_x, -cam_y)
             pygame.draw.rect(screen, (100, 100, 100), offset_wall)
 
+        # Draw Combat Entities
+        for t in dropped_tokens: t.draw(screen, cam_x, cam_y)
+        for proj in projectiles: proj.draw(screen, cam_x, cam_y)
+        for slash in slashes: slash.draw(screen, cam_x, cam_y)
+        for laser in active_lasers: laser.draw(screen, cam_x, cam_y)
+
+        # Draw Player
         offset_player = player.rect.move(-cam_x, -cam_y)
         screen.blit(player.surface, offset_player)
+        if hasattr(player, 'draw_extras'):
+            player.draw_extras(screen, offset_player)
 
-        # draw red damage flash right over the player
+        # Draw Laser Charge Ring
+        if is_charging and charge_timer > 0:
+            charge_ratio = min(charge_timer / CHARGE_REQ, 1.0)
+            pygame.draw.circle(screen, (80, 80, 80), offset_player.center, 40, width=2)
+            fill_radius = int(40 * charge_ratio)
+            if fill_radius > 0:
+                pygame.draw.circle(screen, (0, 255, 255), offset_player.center, fill_radius, width=2)
+
         if flash_timer > 0:
             flash_surf = pygame.Surface(player.rect.size, pygame.SRCALPHA)
             flash_surf.fill((255, 0, 0, 150))
             screen.blit(flash_surf, offset_player)
 
-        # PASS THE PLAYER INTO THE UI SO IT CAN READ THE DECK
         env.draw_custom_ui(screen, current_floor, font, player.health, player.max_health, player.tokens, minions_killed,
                            minions_total, boss_spawned, player)
 
         if current_state == DUNGEON_ROOM:
-            fate_wheel.draw(screen, font)
+            if fate_wheel.active:
+                fate_wheel.draw(screen, font)
         elif current_state == GAMEOVER_SCREEN:
             env.draw_end_screen(screen, font, is_victory=False)
         elif current_state == VICTORY_SCREEN:
