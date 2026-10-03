@@ -330,35 +330,117 @@ while running:
                 is_charging = False
                 charge_timer = 0
 
-            # Update Player Movement and Aiming
+            # --- PLAYER MOVEMENT ---
             player.update(dt, keys, dungeon_walls, pygame.mouse.get_pos(), cam_x, cam_y)
 
-            # Update Projectiles and Combat Tracking
+            # --- UPDATE PROJECTILES & TOKENS ---
             for laser in active_lasers[:]:
                 laser.update()
-                if laser.lifetime <= 0: active_lasers.remove(laser)
+                if laser.lifetime <= 0:
+                    active_lasers.remove(laser)
+
             for proj in projectiles[:]:
                 proj.update()
-                if proj.lifetime <= 0: projectiles.remove(proj)
+                if proj.lifetime <= 0:
+                    projectiles.remove(proj)
+
             for slash in slashes[:]:
                 slash.update()
-                if slash.lifetime <= 0: slashes.remove(slash)
+                if slash.lifetime <= 0:
+                    slashes.remove(slash)
+
             for t in dropped_tokens[:]:
                 t.update(player.rect)
                 if player.rect.colliderect(t.rect):
                     player.tokens += 1
                     dropped_tokens.remove(t)
 
+            # --- ENEMY UPDATES & CONTACT DAMAGE TO PLAYER ---
             for enemy in active_enemies[:]:
-                enemy.update(player.rect, enemy_bullets)
+                enemy.update(player.rect, enemy_bullets, dungeon_walls)
+                
+                # Direct contact damage
+                if player.rect.colliderect(enemy.rect):
+                    player.health -= getattr(enemy, 'damage', 1)
+                    audio.play_sfx("jack_hurt")
+                    shake_timer = 0.2
+                    flash_timer = 0.1
+
+            # --- ENEMY BULLET HITS ON PLAYER ---
+            for eb in enemy_bullets[:]:
+                eb.update()
+                if eb.rect.colliderect(player.rect):
+                    player.health -= getattr(eb, 'damage', 5)
+                    audio.play_sfx("jack_hurt")
+                    shake_timer = 0.2
+                    flash_timer = 0.1
+                    enemy_bullets.remove(eb)
+                elif getattr(eb, 'lifetime', 1) <= 0:
+                    enemy_bullets.remove(eb)
+
+            # --- PLAYER ATTACK HITS ON MINIONS ---
+            for enemy in active_enemies[:]:
+                # Spade Projectiles (7 DMG)
+                for proj in projectiles[:]:
+                    if enemy.rect.colliderect(proj.rect):
+                        enemy.hp -= 7
+                        projectiles.remove(proj)
+                        audio.play_sfx("enemy_hit")
+                        if enemy.hp <= 0:
+                            if enemy in active_enemies:
+                                active_enemies.remove(enemy)
+                            minions_killed += 1
+                            player.tokens += 2
+                            dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
+                            break
+
+                # Club Slashes (20 DMG)
+                for slash in slashes[:]:
+                    if enemy.rect.colliderect(slash.rect):
+                        enemy.hp -= 20
+                        audio.play_sfx("enemy_hit")
+                        if enemy.hp <= 0:
+                            if enemy in active_enemies:
+                                active_enemies.remove(enemy)
+                            minions_killed += 1
+                            player.tokens += 2
+                            dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
+                            break
+
+            # --- BOSS SPAWNING & COMBAT ---
+            if boss_spawned and not active_boss:
+                if current_floor == 1:
+                    active_boss = PiggyBankWalletBoss(WIDTH // 2, HEIGHT // 2)
+                elif current_floor == 2:
+                    active_boss = OverdueBillBoss(WIDTH // 2, HEIGHT // 2)
 
             if active_boss and active_boss.is_alive:
                 active_boss.update(player.rect, enemy_bullets)
 
-            for eb in enemy_bullets[:]:
-                eb.update()
-                if getattr(eb, 'lifetime', 1) <= 0:
-                    enemy_bullets.remove(eb)
+                # Spade Projectile Hits on Boss (7 DMG)
+                for proj in projectiles[:]:
+                    if active_boss.rect.colliderect(proj.rect):
+                        active_boss.take_damage(7)
+                        projectiles.remove(proj)
+                        audio.play_sfx("enemy_hit")
+
+                # Club Slash Hits on Boss (20 DMG)
+                for slash in slashes[:]:
+                    if active_boss.rect.colliderect(slash.rect):
+                        active_boss.take_damage(20)
+                        audio.play_sfx("enemy_hit")
+
+                if not active_boss.is_alive:
+                    player.tokens += 75
+                    boss_spawned = False
+                    active_boss = None
+                    minions_killed = 0
+                    current_floor += 1
+                    audio.play_sfx("boss_dead")
+                    if current_floor > 4:
+                        current_state = VICTORY_SCREEN
+                    else:
+                        current_state = SHOP_ROOM
 
     # rendering
     screen.fill(BG_COLORS.get(current_state, (0, 0, 0)))
