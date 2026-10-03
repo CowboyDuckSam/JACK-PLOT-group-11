@@ -55,7 +55,7 @@ class NormalBossBullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(x, y))
         self.dx = math.cos(angle) * speed
         self.dy = math.sin(angle) * speed
-        self.damage = 10
+        self.damage = 30
 
     def update(self):
         self.rect.x += int(self.dx)
@@ -210,7 +210,7 @@ class OverdueBillBullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(x, y))
         self.dx = math.cos(angle) * speed
         self.dy = math.sin(angle) * speed
-        self.damage = 20
+        self.damage = 30
 
     def update(self):
         self.rect.x += int(self.dx)
@@ -255,7 +255,7 @@ class CommonSenseBossBullet(pygame.sprite.Sprite):
         self.image = pygame.Surface((10, 14))
         self.image.fill((255, 255, 0))
         self.rect = self.image.get_rect(midtop=(x, y))
-        self.damage = 20
+        self.damage = 30
 
     def update(self):
         self.rect.y += 5
@@ -271,7 +271,7 @@ class PoisonBullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(x, y))
         self.dx = math.cos(angle) * speed
         self.dy = math.sin(angle) * speed
-        self.damage = 13
+        self.damage = 20
 
     def update(self):
         self.rect.x += int(self.dx)

@@ -12,7 +12,7 @@ class MeleeMinion(pygame.sprite.Sprite):
 
         self.max_hp = 20 + (floor * 10)
         self.hp = self.max_hp
-        self.damage = 2 + floor
+        self.damage = 8 + (floor * 3)
         self.speed = 3 + (floor * 0.2)
 
         pygame.draw.rect(self.image, (255, 30, 100), (4, 8, 22, 22), border_radius=4)

@@ -79,7 +79,7 @@ def reset_game_state():
     active_boss = None
     minions_killed = 0
     boss_spawned = False
-    minions_total = current_floor * 10  # Scales dynamically per floor!
+    minions_total = current_floor * 10
 
 
 def draw_text_center(text, y_offset=0):
@@ -154,52 +154,6 @@ while running:
 
             is_charging = False
             charge_timer = 0.0
-
-        if event.type == pygame.KEYDOWN and current_state == DUNGEON_ROOM:
-            if event.key == pygame.K_1:
-                current_state = LEVEL_SELECT
-            elif event.key == pygame.K_2:
-                current_state = DUNGEON_ROOM
-            elif event.key == pygame.K_3:
-                current_state = SHOP_ROOM
-            elif event.key == pygame.K_4:
-                current_state = GAMEOVER_SCREEN
-            elif event.key == pygame.K_5:
-                current_state = VICTORY_SCREEN
-            elif event.key == pygame.K_h:
-                if player.take_damage(25):
-                    audio.play_sfx("jack_hurt")
-                    shake_timer = 0.3
-                    flash_timer = 0.15
-            elif event.key == pygame.K_r and not fate_wheel.active:
-                audio.play_sfx("wheel_open")
-                fate_wheel.open()
-            elif event.key == pygame.K_k and not boss_spawned:
-                minions_killed += 1
-                player.tokens += 5
-                dropped_tokens.append(Token(player.rect.centerx + random.randint(-50, 50),
-                                            player.rect.centery + random.randint(-50, 50)))
-                audio.play_sfx("enemy_hit")
-                if minions_killed % 5 == 0 and not fate_wheel.active:
-                    audio.play_sfx("wheel_open")
-                    fate_wheel.open()
-                if minions_killed >= minions_total:
-                    audio.play_sfx("boss_spawn")
-                    boss_spawned = True
-            elif event.key == pygame.K_b and boss_spawned:
-                player.tokens += 75
-                boss_spawned = False
-                minions_killed = 0
-                current_floor += 1
-                minions_total = current_floor * 10
-                audio.play_sfx("boss_dead")
-
-                if current_floor > 4:
-                    current_state = VICTORY_SCREEN
-                else:
-                    if not is_guest:
-                        login_manager.save_progress(player, current_floor)
-                    current_state = SHOP_ROOM
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
@@ -294,7 +248,7 @@ while running:
                     player.deck.clear()
                     reset_game_state()
 
-                    current_state = START_MENU
+                    current_state = LEVEL_SELECT
 
     if shake_timer > 0: shake_timer -= dt
     if flash_timer > 0: flash_timer -= dt
@@ -410,6 +364,12 @@ while running:
                             minions_killed += 1
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
+
+                            # Fate Wheel triggers every 5 kills
+                            if minions_killed % 5 == 0 and not fate_wheel.active and not boss_spawned:
+                                audio.play_sfx("wheel_open")
+                                fate_wheel.open()
+
                             if minions_killed >= minions_total and not boss_spawned:
                                 boss_spawned = True
                                 audio.play_sfx("boss_spawn")
@@ -429,9 +389,16 @@ while running:
                             minions_killed += 1
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
+
+                            # Fate Wheel triggers every 5 kills
+                            if minions_killed % 5 == 0 and not fate_wheel.active and not boss_spawned:
+                                audio.play_sfx("wheel_open")
+                                fate_wheel.open()
+
                             if minions_killed >= minions_total and not boss_spawned:
                                 boss_spawned = True
                                 audio.play_sfx("boss_spawn")
+
 
             if boss_spawned and not active_boss:
                 active_enemies.clear()
