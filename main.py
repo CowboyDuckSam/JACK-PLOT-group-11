@@ -382,7 +382,7 @@ while running:
             for enemy in active_enemies[:]:
                 # Spade Projectiles (7 DMG)
                 for proj in projectiles[:]:
-                    if enemy.rect.colliderect(proj.rect):
+                    if enemy.rect.collidepoint(proj.x, proj.y):  # CHANGED THIS LINE
                         enemy.hp -= 7
                         projectiles.remove(proj)
                         audio.play_sfx("enemy_hit")
@@ -396,7 +396,7 @@ while running:
 
                 # Club Slashes (20 DMG)
                 for slash in slashes[:]:
-                    if enemy.rect.colliderect(slash.rect):
+                    if enemy.rect.collidepoint(slash.x, slash.y):  # CHANGED THIS LINE
                         enemy.hp -= 20
                         audio.play_sfx("enemy_hit")
                         if enemy.hp <= 0:
@@ -419,14 +419,14 @@ while running:
 
                 # Spade Projectile Hits on Boss (7 DMG)
                 for proj in projectiles[:]:
-                    if active_boss.rect.colliderect(proj.rect):
+                    if active_boss.rect.collidepoint(proj.x, proj.y):  # CHANGED THIS LINE
                         active_boss.take_damage(7)
                         projectiles.remove(proj)
                         audio.play_sfx("enemy_hit")
 
                 # Club Slash Hits on Boss (20 DMG)
                 for slash in slashes[:]:
-                    if active_boss.rect.colliderect(slash.rect):
+                    if active_boss.rect.collidepoint(slash.x, slash.y):  # CHANGED THIS LINE
                         active_boss.take_damage(20)
                         audio.play_sfx("enemy_hit")
 
