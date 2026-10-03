@@ -1,11 +1,8 @@
 import pygame
 import math
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-
 class MeleeMinion(pygame.sprite.Sprite):
-    """Close-range minion with spikes that chases the player closely."""
+    """Close-range minion with spikes that chases the player closely. 20 HP."""
 
     def __init__(self, x, y):
         super().__init__()
@@ -13,12 +10,17 @@ class MeleeMinion(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(x, y))
 
         self.hp = 20
+        self.max_hp = 20
         self.damage = 2
         self.speed = 3
         
-        # Red/Pink body with aggressive top spike
+        # Red/Pink body with spiky horn
         pygame.draw.rect(self.image, (255, 30, 100), (4, 8, 22, 22), border_radius=4)
-        pygame.draw.polygon(self.image, (255, 200, 0), [(15, 0), (6, 8), (24, 8)]) # Spiky horn
+        pygame.draw.polygon(self.image, (255, 200, 0), [(15, 0), (6, 8), (24, 8)])
+
+    def take_damage(self, amount):
+        """Applies damage to minion health."""
+        self.hp -= amount
 
     def update(self, player_rect, enemy_bullets, dungeon_walls=None):
         dx = player_rect.centerx - self.rect.centerx
@@ -29,7 +31,6 @@ class MeleeMinion(pygame.sprite.Sprite):
             move_x = (dx / dist) * self.speed
             move_y = (dy / dist) * self.speed
 
-            # Axis-aligned wall collision checks
             self.rect.x += move_x
             if dungeon_walls:
                 for wall in dungeon_walls:
@@ -44,12 +45,12 @@ class MeleeMinion(pygame.sprite.Sprite):
                         if move_y > 0: self.rect.bottom = wall.top
                         elif move_y < 0: self.rect.top = wall.bottom
 
-    def draw(self, surface, cam_x, cam_y):
+    def draw(self, surface, cam_x=0, cam_y=0):
         surface.blit(self.image, (self.rect.x - cam_x, self.rect.y - cam_y))
 
 
 class RangedMinion(pygame.sprite.Sprite):
-    """Long-range minion with styled core and turret look that shoots on cooldown."""
+    """Long-range minion that shoots on cooldown. 20 HP."""
 
     def __init__(self, x, y):
         super().__init__()
@@ -57,15 +58,19 @@ class RangedMinion(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(x, y))
 
         self.hp = 20
+        self.max_hp = 20
         self.damage = 1
         self.speed = 1.5
         self.shoot_cooldown = 90
         self.timer = 0
 
-        # Turquoise body with central firing orb
         pygame.draw.circle(self.image, (0, 200, 255), (15, 15), 14)
         pygame.draw.circle(self.image, (255, 255, 255), (15, 15), 6)
         pygame.draw.circle(self.image, (0, 100, 200), (15, 15), 14, width=2)
+
+    def take_damage(self, amount):
+        """Applies damage to minion health."""
+        self.hp -= amount
 
     def update(self, player_rect, enemy_bullets, dungeon_walls=None):
         dx = player_rect.centerx - self.rect.centerx
@@ -76,7 +81,6 @@ class RangedMinion(pygame.sprite.Sprite):
             move_x = (dx / dist) * self.speed
             move_y = (dy / dist) * self.speed
 
-            # Axis-aligned wall collision checks
             self.rect.x += move_x
             if dungeon_walls:
                 for wall in dungeon_walls:
@@ -104,7 +108,7 @@ class RangedMinion(pygame.sprite.Sprite):
         bullet = EnemyBullet(self.rect.centerx, self.rect.centery, angle, speed=5, damage=self.damage)
         enemy_bullets.append(bullet)
 
-    def draw(self, surface, cam_x, cam_y):
+    def draw(self, surface, cam_x=0, cam_y=0):
         surface.blit(self.image, (self.rect.x - cam_x, self.rect.y - cam_y))
 
 
@@ -124,5 +128,5 @@ class EnemyBullet(pygame.sprite.Sprite):
         self.rect.y += self.dy
         self.lifetime -= 1
 
-    def draw(self, surface, cam_x, cam_y):
+    def draw(self, surface, cam_x=0, cam_y=0):
         surface.blit(self.image, (self.rect.x - cam_x, self.rect.y - cam_y))

@@ -2,9 +2,8 @@ import pygame
 import math
 import random
 
-
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 960
+SCREEN_HEIGHT = 540
 
 
 class Boss(pygame.sprite.Sprite):
@@ -22,7 +21,7 @@ class Boss(pygame.sprite.Sprite):
         self.bullets = pygame.sprite.Group()
 
     def update(self, player_rect):
-        """Update boss behavior. Override in subclasses."""
+        """Update boss behavior."""
         self.bullets.update()
 
     def take_damage(self, amount):
@@ -34,7 +33,7 @@ class Boss(pygame.sprite.Sprite):
 
     def draw_healthbar(self, surface):
         """Draw health bar above the boss."""
-        bar_width = 100
+        bar_width = 120
         bar_height = 8
         bar_x = self.rect.centerx - (bar_width // 2)
         bar_y = self.rect.top - 15
@@ -47,7 +46,6 @@ class Boss(pygame.sprite.Sprite):
     def change_phase(self, new_phase):
         """Change boss phase."""
         self.phase = new_phase
-        print(f"Boss entering phase {new_phase}")
 
 
 class NormalBossBullet(pygame.sprite.Sprite):
@@ -141,7 +139,7 @@ class PiggyBankWalletBoss(Boss):
             self.is_alive = False
 
     def _update_laser_phase(self, player_rect):
-        """Simple placeholder laser maze behavior once Piggy Bank dies."""
+        """Laser maze behavior once Piggy Bank dies."""
         self.shoot_timer += 1
         if self.shoot_timer >= 45:
             self.shoot_timer = 0
@@ -150,10 +148,10 @@ class PiggyBankWalletBoss(Boss):
 
 
 class OverdueBillBoss(Boss):
-    """Level 2 boss - fires homing bullets and creates damaging floor zones. 300 HP."""
+    """Level 2 boss - fires homing bullets and creates damaging floor zones. 350 HP."""
 
     def __init__(self, x, y):
-        super().__init__(x, y, max_hp=300)
+        super().__init__(x, y, max_hp=350)
         self.shoot_timer = 0
         self.debt_zones = pygame.sprite.Group()
         self.zone_timer = 0
@@ -245,7 +243,7 @@ class CommonSenseBoss(Boss):
         self.rect.centery = player_rect.centery
 
     def on_player_attack(self):
-        """Called by main.py the moment the player attacks. Boss copies the attack immediately."""
+        """Called when player attacks to copy attack."""
         bullet = CommonSenseBossBullet(self.rect.centerx, self.rect.bottom)
         self.bullets.add(bullet)
 
@@ -300,7 +298,7 @@ class InterestRateBoss(Boss):
         self.grow_timer = 0
 
     def update(self, player_rect):
-        """Move the head toward the player, trail segments behind it, and fire poison waves."""
+        """Move head toward player, trail segments behind, and fire poison waves."""
         self.bullets.update()
 
         dx = player_rect.centerx - self.rect.centerx
@@ -328,14 +326,14 @@ class InterestRateBoss(Boss):
             self.speed += 0.3
 
     def _update_segments(self):
-        """Place each segment along the trail of the head's past positions."""
+        """Place each segment along past positions."""
         spacing = 15
         for i, segment in enumerate(self.segments):
             pos_index = min((i + 1) * spacing, len(self.positions) - 1)
             segment.center = self.positions[pos_index]
 
     def shoot_wave(self, player_rect):
-        """Fire a wave of poison bullets, more than Level 1's dual-shot."""
+        """Fire a wave of poison bullets."""
         base_dx = player_rect.centerx - self.rect.centerx
         base_dy = player_rect.centery - self.rect.centery
         base_angle = math.atan2(base_dy, base_dx)

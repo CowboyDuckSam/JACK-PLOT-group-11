@@ -1,11 +1,16 @@
 import sys
 import math
 import random
-import os 
+import os
 import pygame
-#changed a bit to fix some bugs and to look more tidy and easier for me to work on
+
+# Import abilities, enemies, and bosses
+from combat import SpadeProjectile, ClubSlash, LaserBeam, Token
+from enemy import MeleeMinion, RangedMinion
+from Boss import PiggyBankWalletBoss, OverdueBillBoss, InterestRateBoss, CommonSenseBoss
+
 # 1. INITIALIZATION & SETUP
-pygame.mixer.pre_init(44100, -16, 2, 512) # Sets frequency, 16-bit sound, stereo (2 channels), buffer size
+pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
 
 WIDTH, HEIGHT = 960, 540
@@ -18,7 +23,7 @@ COLOR_BG = (20, 15, 30)
 COLOR_PLAYER = (240, 240, 240)
 COLOR_DIAMOND = (255, 60, 60)
 COLOR_HEART = (255, 100, 150)
-COLOR_SPADE = (180, 70, 255) 
+COLOR_SPADE = (180, 70, 255)
 COLOR_CLUB = (50, 220, 120)
 COLOR_LASER = (0, 255, 255)
 COLOR_TOKEN_OUTER = (140, 20, 220)
@@ -30,7 +35,8 @@ SUIT_COLORS = {
     "CLUB": COLOR_CLUB,
     "DIAMOND": COLOR_DIAMOND
 }
-# --- LOAD WAV AUDIO ASSETS FROM ASSETS FOLDER ---
+
+# --- AUDIO ASSETS ---
 ASSET_DIR = os.path.join(os.path.dirname(__file__), "sound_assets")
 
 try:
@@ -39,191 +45,19 @@ try:
     SOUND_HEART = pygame.mixer.Sound(os.path.join(ASSET_DIR, "heart.wav"))
     SOUND_DIAMOND = pygame.mixer.Sound(os.path.join(ASSET_DIR, "diamond.wav"))
     SOUND_LASER = pygame.mixer.Sound(os.path.join(ASSET_DIR, "laser.wav"))
+except pygame.error:
+    dummy_sound = pygame.mixer.Sound(buffer=bytes([0]*100))
+    SOUND_SPADE = SOUND_CLUB = SOUND_HEART = SOUND_DIAMOND = SOUND_LASER = dummy_sound
 
-    # Adjust volumes (0.0 = silent, 1.0 = full volume)
-    SOUND_SPADE.set_volume(0.5)
-    SOUND_CLUB.set_volume(0.6)
-    SOUND_HEART.set_volume(0.5)
-    SOUND_DIAMOND.set_volume(0.5)
-    SOUND_LASER.set_volume(0.7)
-    
-except pygame.error as e:
-    print(f"Audio Load Error: {e}")
-
-# --- CUSTOM TIMERS & EVENTS ---
-# Trigger event every 500 milliseconds (0.5 seconds)
 SPAWN_CARD_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(SPAWN_CARD_EVENT, 500)
 
-SPAWN_ENEMY_EVENT = pygame.USEREVENT + 2
-pygame.time.set_timer(SPAWN_ENEMY_EVENT, 2000)
-
-# 2. GAME CLASSES
-
-class SpadeProjectile:
-    """Ranged arrow shot made of a custom spade polygon."""
-    def __init__(self, x, y, angle):
-        self.x = x
-        self.y = y
-        self.angle = angle
-        self.speed = 12
-        self.damage = 15
-        self.lifetime = 60
-        
-        rad = math.radians(self.angle)
-        self.dx = math.cos(rad) * self.speed
-        self.dy = math.sin(rad) * self.speed
-
-    def update(self):
-        self.x += self.dx
-        self.y += self.dy
-        self.lifetime -= 1
-
-    def draw(self, surface):
-        rad = math.radians(self.angle)
-        tip = (self.x + math.cos(rad) * 15, self.y + math.sin(rad) * 15)
-        left = (self.x + math.cos(rad + 2.4) * 10, self.y + math.sin(rad + 2.4) * 10)
-        base = (self.x - math.cos(rad) * 5, self.y - math.sin(rad) * 5)
-        right = (self.x + math.cos(rad - 2.4) * 10, self.y + math.sin(rad - 2.4) * 10)
-
-        pygame.draw.polygon(surface, COLOR_SPADE, [tip, left, base, right])
-
-
-class ClubSlash:
-    """Triangle-shaped melee slash arc where the player is facing."""
-    def __init__(self, x, y, angle):
-        self.x = x
-        self.y = y
-        self.angle = angle
-        self.damage = 10
-        self.lifetime = 10
-        self.reach = 65
-        self.spread = 0.6
-
-    def update(self):
-        self.lifetime -= 1
-
-    def draw(self, surface):
-        rad = math.radians(self.angle)
-        origin = (self.x, self.y)
-        left_pt = (self.x + math.cos(rad - self.spread) * self.reach, 
-                   self.y + math.sin(rad - self.spread) * self.reach)
-        right_pt = (self.x + math.cos(rad + self.spread) * self.reach, 
-                    self.y + math.sin(rad + self.spread) * self.reach)
-
-        pygame.draw.polygon(surface, COLOR_CLUB, [origin, left_pt, right_pt])
-class LaserBeam:
-    """Laser beam that lasts 5 seconds (300 frames) and follows player orientation."""
-    def __init__(self, player):
-        self.player = player
-        self.lifetime = 120  # 2 seconds at 60 FPS
-        self.total_damage = 20
-        self.damage_per_frame = self.total_damage / 300
-        self.beam_length = 800
-
-    def update(self):
-        self.lifetime -= 1 
-
-    def draw(self, surface):
-        # Calculate endpoint based on player's current facing angle
-        rad = math.radians(self.player.angle)
-        start_pos = self.player.rect.center
-        end_x = start_pos[0] + math.cos(rad) * self.beam_length
-        end_y = start_pos[1] + math.sin(rad) * self.beam_length
-
-        # Outer glow beam
-        pygame.draw.line(surface, COLOR_LASER, start_pos, (end_x, end_y), 18)
-        # Inner white core beam
-        pygame.draw.line(surface, (255, 255, 255), start_pos, (end_x, end_y), 6)
-class Token:
-    """token with scatter and magnetic attraction mechanics."""
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.radius = 8
-        self.rect = pygame.Rect(x - self.radius, y - self.radius, self.radius * 2, self.radius * 2)
-        
-        # Initial scatter burst velocity when dropping
-        self.vx = random.uniform(-4, 4)
-        self.vy = random.uniform(-4, 4)
-        self.friction = 0.88  # Slows down initial scatter
-        
-        # Magnetism Parameters
-        self.magnet_distance = 150  # Pull distance in pixels
-        self.magnet_speed = 0.8     # Acceleration toward Jack
-
-    def update(self, player_rect):
-        dx = player_rect.centerx - self.x
-        dy = player_rect.centery - self.y
-        dist = math.hypot(dx, dy)
-
-        # MAGNETIC EFFECT: Pull token toward Jack if inside range
-        if dist < self.magnet_distance and dist > 0:
-            self.vx += (dx / dist) * self.magnet_speed
-            self.vy += (dy / dist) * self.magnet_speed
-        else:
-            self.vx *= self.friction
-            self.vy *= self.friction
-
-        self.x += self.vx
-        self.y += self.vy
-        self.rect.center = (int(self.x), int(self.y))
-
-    def draw(self, surface):
-        pos = (int(self.x), int(self.y))
-        # Outer purple chip body
-        pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, self.radius)
-        # Inner yellow/gold ring (gambling chip look)
-        pygame.draw.circle(surface, COLOR_TOKEN_INNER, pos, self.radius - 3)
-        # Center purple dot
-        pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, 2)
-
-class Token:
-    """token with scatter and magnetic attraction mechanics."""
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.radius = 8
-        self.rect = pygame.Rect(x - self.radius, y - self.radius, self.radius * 2, self.radius * 2)
-        
-        # Initial scatter burst velocity when dropping
-        self.vx = random.uniform(-4, 4)
-        self.vy = random.uniform(-4, 4)
-        self.friction = 0.88  # Slows down initial scatter
-        
-        # Magnetism Parameters
-        self.magnet_distance = 150  # Pull distance in pixels
-        self.magnet_speed = 0.8     # Acceleration toward Jack
-
-    def update(self, player_rect):
-        dx = player_rect.centerx - self.x
-        dy = player_rect.centery - self.y
-        dist = math.hypot(dx, dy)
-
-        # MAGNETIC EFFECT: Pull token toward Jack if inside range
-        if dist < self.magnet_distance and dist > 0:
-            self.vx += (dx / dist) * self.magnet_speed
-            self.vy += (dy / dist) * self.magnet_speed
-        else:
-            self.vx *= self.friction
-            self.vy *= self.friction
-
-        self.x += self.vx
-        self.y += self.vy
-        self.rect.center = (int(self.x), int(self.y))
-
-    def draw(self, surface):
-        pos = (int(self.x), int(self.y))
-        pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, self.radius)
-        pygame.draw.circle(surface, COLOR_TOKEN_INNER, pos, self.radius - 3)
-        pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, 2)
 
 class Player:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 32, 32)
         self.base_speed = 4
         self.angle = 0.0
-        
         self.shield_hp = 0
         self.is_dashing = False
         self.dash_timer = 0
@@ -256,9 +90,7 @@ class Player:
         self.rect.clamp_ip(screen.get_rect())
 
     def use_diamond_dash(self, keys):
-        if self.is_dashing:
-            return
-            
+        if self.is_dashing: return
         move_vec = pygame.math.Vector2(0, 0)
         if keys[pygame.K_a]: move_vec.x -= 1
         if keys[pygame.K_d]: move_vec.x += 1
@@ -279,7 +111,6 @@ class Player:
 
     def draw(self, surface):
         pygame.draw.rect(surface, COLOR_PLAYER, self.rect, border_radius=4)
-        
         rad = math.radians(self.angle)
         end_x = self.rect.centerx + math.cos(rad) * 24
         end_y = self.rect.centery + math.sin(rad) * 24
@@ -289,27 +120,28 @@ class Player:
             pygame.draw.circle(surface, COLOR_HEART, self.rect.center, 28, width=3)
 
 
-# 3. INSTANTIATE GAME OBJECTS
+# Setup Game Entities
 player = Player(WIDTH // 2, HEIGHT // 2)
 projectiles = []
 slashes = []
 active_lasers = []
+minions = [MeleeMinion(200, 150), RangedMinion(700, 150)]
+current_boss = PiggyBankWalletBoss(WIDTH // 2, 100)  # Level 1 Boss (200 HP)
+
 tokens = []
 player_tokens = 0
 
-# Hand / Queue Data Structures
-card_hand = []  # Holds maximum of 5 cards
+card_hand = []
 MAX_HAND_SIZE = 5
 SUITS = ["SPADE", "HEART", "CLUB", "DIAMOND"]
 
-# Laser Charge Tracking Variables
-charge_timer = 0          # Tracks frames held (180 frames = 3 seconds at 60 FPS)
-CHARGE_REQ = 180          # 3 seconds * 60 FPS
+charge_timer = 0
+CHARGE_REQ = 180
 is_charging = False
 
 font = pygame.font.SysFont("Arial", 14, bold=True)
 
-# 4. MAIN GAME LOOP
+# MAIN GAME LOOP
 running = True
 while running:
     mouse_pos = pygame.mouse.get_pos()
@@ -320,12 +152,13 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-        # --- TIMER EVENT: GENERATE CARD EVERY 0.5 SECONDS ---
-        if event.type == SPAWN_CARD_EVENT:
-            if len(card_hand) < MAX_HAND_SIZE:
-                card_hand.append(random.choice(SUITS))
+        if event.type == SPAWN_CARD_EVENT and len(card_hand) < MAX_HAND_SIZE:
+            card_hand.append(random.choice(SUITS))
 
-        # --- RELEASE LEFT CLICK: EXECUTE SINGLE CARD IF NOT CHARGING & NO LASER ACTIVE ---
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            for _ in range(5):
+                tokens.append(Token(player.rect.centerx, player.rect.centery))
+
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if len(active_lasers) == 0 and is_charging and charge_timer < CHARGE_REQ:
                 if len(card_hand) > 0:
@@ -344,57 +177,125 @@ while running:
                         player.use_diamond_dash(keys)
                         SOUND_DIAMOND.play()
 
-            # Reset charge state on release
+                    # Trigger CommonSenseBoss copied attack
+                    if isinstance(current_boss, CommonSenseBoss) and current_boss.is_alive:
+                        current_boss.on_player_attack()
+
             is_charging = False
             charge_timer = 0
 
-    # --- HOLD LEFT CLICK CHARGE LASER---
-    if mouse_buttons[0]:  # Left mouse button is currently held down
+    # Charge Laser
+    if mouse_buttons[0] and len(active_lasers) == 0:
         if len(card_hand) >= 4:
             is_charging = True
             charge_timer += 1
-
-            # Fully Charged! Fires laser
             if charge_timer >= CHARGE_REQ:
-                # Consume 4 cards from the queue
-                for _ in range(4):
-                    card_hand.pop(0)
-
-                # Spawn active laser beam
+                for _ in range(4): card_hand.pop(0)
                 active_lasers.append(LaserBeam(player))
                 SOUND_LASER.play()
-
-                # Reset charging state
                 is_charging = False
                 charge_timer = 0
+        else:
+            is_charging = False
+            charge_timer = 0
     else:
-        # Not enough cards to charge
-        is_charging = False
-        charge_timer = 0
+        if len(active_lasers) > 0:
+            is_charging = False
+            charge_timer = 0
 
-    # --- UPDATES ---
-   # Update Tokens & Player Collection (Pass player.rect for magnetism)
-    for token in tokens[:]:
-        token.update(player.rect)
-        if player.rect.colliderect(token.rect):
-            player_tokens += 1
-            tokens.remove(token)
+    # --- UPDATES & COLLISION LINKING ---
     player.update(keys, mouse_pos)
-    for laser in active_lasers[:]: 
-        laser.update()
-        if laser.lifetime <= 0:
-            active_lasers.remove(laser)
+
+    # 1. SPADE DAMAGE COLLISION (20 DMG)
     for proj in projectiles[:]:
         proj.update()
         if proj.lifetime <= 0 or not screen.get_rect().collidepoint(proj.x, proj.y):
-            projectiles.remove(proj)
+            if proj in projectiles: projectiles.remove(proj)
+            continue
 
+        proj_rect = pygame.Rect(proj.x - 8, proj.y - 8, 16, 16)
+
+        # Damage Minions
+        for minion in minions[:]:
+            if proj_rect.colliderect(minion.rect):
+                minion.take_damage(20)  # Spade = 20 DMG
+                if minion.hp <= 0:
+                    for _ in range(5): tokens.append(Token(minion.rect.centerx, minion.rect.centery))
+                    minions.remove(minion)
+                if proj in projectiles: projectiles.remove(proj)
+                break
+
+        # Damage Bosses
+        if current_boss and current_boss.is_alive and proj in projectiles:
+            if isinstance(current_boss, PiggyBankWalletBoss):
+                if current_boss.piggy_alive and proj_rect.colliderect(current_boss.piggy_rect):
+                    current_boss.take_damage_piggy(20)
+                    projectiles.remove(proj)
+                elif current_boss.wallet_alive and proj_rect.colliderect(current_boss.wallet_rect):
+                    current_boss.take_damage_wallet(20)
+                    projectiles.remove(proj)
+            elif proj_rect.colliderect(current_boss.rect):
+                current_boss.take_damage(20)
+                projectiles.remove(proj)
+
+    # 2. CLUB SLASH DAMAGE COLLISION (15 DMG)
     for slash in slashes[:]:
         slash.update()
         if slash.lifetime <= 0:
             slashes.remove(slash)
+            continue
 
-    # Update Tokens & Player Collection (With Magnetism)
+        slash_rect = pygame.Rect(slash.x - slash.reach, slash.y - slash.reach, slash.reach * 2, slash.reach * 2)
+
+        for minion in minions[:]:
+            if slash_rect.colliderect(minion.rect):
+                minion.take_damage(15)  # Club = 15 DMG
+                if minion.hp <= 0:
+                    for _ in range(5): tokens.append(Token(minion.rect.centerx, minion.rect.centery))
+                    minions.remove(minion)
+
+        if current_boss and current_boss.is_alive:
+            if isinstance(current_boss, PiggyBankWalletBoss):
+                if current_boss.piggy_alive and slash_rect.colliderect(current_boss.piggy_rect):
+                    current_boss.take_damage_piggy(15)
+                if current_boss.wallet_alive and slash_rect.colliderect(current_boss.wallet_rect):
+                    current_boss.take_damage_wallet(15)
+            elif slash_rect.colliderect(current_boss.rect):
+                current_boss.take_damage(15)
+
+    # 3. LASER BEAM DAMAGE COLLISION
+    for laser in active_lasers[:]:
+        laser.update()
+        if laser.lifetime <= 0:
+            active_lasers.remove(laser)
+            continue
+
+        rad = math.radians(player.angle)
+        start_pos = player.rect.center
+        end_x = start_pos[0] + math.cos(rad) * laser.beam_length
+        end_y = start_pos[1] + math.sin(rad) * laser.beam_length
+
+        for minion in minions[:]:
+            if minion.rect.clipline(start_pos, (end_x, end_y)):
+                minion.take_damage(1)
+                if minion.hp <= 0:
+                    for _ in range(5): tokens.append(Token(minion.rect.centerx, minion.rect.centery))
+                    minions.remove(minion)
+
+        if current_boss and current_boss.is_alive:
+            if isinstance(current_boss, PiggyBankWalletBoss):
+                if current_boss.piggy_alive and current_boss.piggy_rect.clipline(start_pos, (end_x, end_y)):
+                    current_boss.take_damage_piggy(1)
+                if current_boss.wallet_alive and current_boss.wallet_rect.clipline(start_pos, (end_x, end_y)):
+                    current_boss.take_damage_wallet(1)
+            elif current_boss.rect.clipline(start_pos, (end_x, end_y)):
+                current_boss.take_damage(1)
+
+    # Update Enemies & Bosses
+    for minion in minions: minion.update(player.rect, [])
+    if current_boss and current_boss.is_alive: current_boss.update(player.rect)
+
+    # Update Tokens
     for token in tokens[:]:
         token.update(player.rect)
         if player.rect.colliderect(token.rect):
@@ -403,85 +304,52 @@ while running:
 
     # --- RENDERING ---
     screen.fill(COLOR_BG)
-    # Render Active Lasers
-    for laser in active_lasers:
-        laser.draw(screen)
-    # Render Slashes
-    for slash in slashes:
-        slash.draw(screen)
 
-    # Render Tokens
-    for token in tokens:
-        token.draw(screen)
+    for laser in active_lasers: laser.draw(screen)
+    for slash in slashes: slash.draw(screen)
+    for proj in projectiles: proj.draw(screen)
+    for token in tokens: token.draw(screen)
 
     player.draw(screen)
-    # --- DRAW CHARGING INDICATOR CIRCLE ---
-    if is_charging and charge_timer > 0:
-        charge_ratio = charge_timer / CHARGE_REQ
-        pygame.draw.circle(screen, (80, 80, 80), player.rect.center, 36, width=2)
-        fill_radius = int(36 * charge_ratio)
-        if fill_radius > 0:
-            pygame.draw.circle(screen, COLOR_LASER, player.rect.center, fill_radius, width=2)  
 
-    for token in tokens:
-        token.draw(screen)
+    for minion in minions: minion.draw(screen)
+    if current_boss and current_boss.is_alive:
+        screen.blit(current_boss.image, current_boss.rect)
+        current_boss.draw_healthbar(screen)
 
-    # --- DRAW CHARGING INDICATOR CIRCLE ---
+    # Charge Ring Indicator
     if is_charging and charge_timer > 0:
         charge_ratio = charge_timer / CHARGE_REQ
         pygame.draw.circle(screen, (80, 80, 80), player.rect.center, 36, width=2)
         fill_radius = int(36 * charge_ratio)
         if fill_radius > 0:
             pygame.draw.circle(screen, COLOR_LASER, player.rect.center, fill_radius, width=2)
-            
-    for proj in projectiles:
-        proj.draw(screen)
 
-    # --- DRAW CARD QUEUE HUD ---
+    # HUD Card Queue
     hud_x = 20
     hud_y = HEIGHT - 70
-    
-    # Label and text
-    text_surf = font.render("CARD QUEUE (Left Click to Use First):", True, (200, 200, 200))
+    text_surf = font.render("CARD QUEUE (Left Click = Use | Hold 3s = Laser):", True, (200, 200, 200))
     screen.blit(text_surf, (hud_x, hud_y - 25))
 
     for idx, suit in enumerate(card_hand):
         box_rect = pygame.Rect(hud_x + (idx * 60), hud_y, 50, 50)
         card_color = SUIT_COLORS[suit]
-        
-        # Highlight first card in line
         border_width = 4 if idx == 0 else 1
         pygame.draw.rect(screen, card_color, box_rect, width=border_width, border_radius=6)
-        
-        # Render text name inside card
         card_txt = font.render(suit[:4], True, card_color)
         screen.blit(card_txt, (box_rect.x + 5, box_rect.y + 16))
 
- # --- DRAW TOKEN COUNTER (TOP-RIGHT) ---
+    # HUD Token Counter
     token_str = f"TOKENS: {player_tokens}"
     token_surf = font.render(token_str, True, COLOR_TOKEN_INNER)
     token_rect = token_surf.get_rect(topright=(WIDTH - 20, 20))
-    
     bg_box = token_rect.inflate(12, 8)
     pygame.draw.rect(screen, (10, 10, 20), bg_box, border_radius=4)
     pygame.draw.rect(screen, COLOR_TOKEN_OUTER, bg_box, width=2, border_radius=4)
     screen.blit(token_surf, token_rect)
 
-    # Draw Mouse Cursor
-    pygame.draw.circle(screen, (255, 255, 255), mouse_pos, 5, width=1)
-    # --- DRAW TOKEN COUNTER (TOP-RIGHT) ---
-    token_str = f"TOKENS: {player_tokens}"
-    token_surf = font.render(token_str, True, COLOR_TOKEN_INNER)
-    token_rect = token_surf.get_rect(topright=(WIDTH - 20, 20))
-    
-    # Draw dark background box for top-right counter
-    bg_box = token_rect.inflate(12, 8)
-    pygame.draw.rect(screen, (10, 10, 20), bg_box, border_radius=4)
-    pygame.draw.rect(screen, COLOR_TOKEN_OUTER, bg_box, width=2, border_radius=4)
-    screen.blit(token_surf, token_rect)
-    
     pygame.display.flip()
     clock.tick(60)
-#end 
+
 pygame.quit()
 sys.exit()
