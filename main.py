@@ -1,6 +1,6 @@
 import sys
-import random
 import math
+import random
 import pygame
 from wheel import FateWheel
 from settings import *
@@ -11,7 +11,7 @@ from shop import NeonShop
 from audio_manager import AudioManager
 from combat import SpadeProjectile, ClubSlash, LaserBeam, Token
 from enemy import MeleeMinion, RangedMinion, EnemyBullet
-from Boss import PiggyBankWalletBoss, OverdueBillBoss
+from Boss import PiggyBankWalletBoss, OverdueBillBoss, InterestRateBoss, CommonSenseBoss
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
@@ -375,7 +375,7 @@ while running:
                     enemy_bullets.remove(eb)
 
             # =========================================================
-            # --- FIXED: PLAYER ATTACK DAMAGE HITS ON MINIONS ---
+            # --- PLAYER ATTACK DAMAGE HITS ON MINIONS ---
             # =========================================================
 
             # 1. Spade Projectile Hits (20 DMG)
@@ -393,6 +393,11 @@ while running:
                             minions_killed += 1
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
+
+                            # Trigger Boss Spawn upon reaching kill limit
+                            if minions_killed >= minions_total and not boss_spawned:
+                                boss_spawned = True
+                                audio.play_sfx("boss_spawn")
                         break
 
             # 2. Club Slash Hits (15 DMG)
@@ -408,6 +413,10 @@ while running:
                             minions_killed += 1
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
+
+                            if minions_killed >= minions_total and not boss_spawned:
+                                boss_spawned = True
+                                audio.play_sfx("boss_spawn")
 
             # 3. Laser Beam Continuous Hits
             for laser in active_lasers[:]:
@@ -426,14 +435,23 @@ while running:
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
 
+                            if minions_killed >= minions_total and not boss_spawned:
+                                boss_spawned = True
+                                audio.play_sfx("boss_spawn")
+
             # =========================================================
             # --- BOSS SPAWNING & COMBAT COLLISIONS ---
             # =========================================================
             if boss_spawned and not active_boss:
+                active_enemies.clear() # Clear minions when boss appears
                 if current_floor == 1:
                     active_boss = PiggyBankWalletBoss(WIDTH // 2, HEIGHT // 2)
                 elif current_floor == 2:
                     active_boss = OverdueBillBoss(WIDTH // 2, HEIGHT // 2)
+                elif current_floor == 3:
+                    active_boss = InterestRateBoss(WIDTH // 2, HEIGHT // 2)
+                elif current_floor == 4:
+                    active_boss = CommonSenseBoss(WIDTH // 2, HEIGHT // 2)
 
             if active_boss and active_boss.is_alive:
                 active_boss.update(player.rect)

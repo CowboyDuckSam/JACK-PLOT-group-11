@@ -2,7 +2,7 @@ import pygame
 import math
 
 class MeleeMinion(pygame.sprite.Sprite):
-    """Close-range minion with spikes that chases the player closely. 20 HP."""
+    """Close-range minion with spikes that chases player. 20 HP."""
 
     def __init__(self, x, y):
         super().__init__()
@@ -14,12 +14,10 @@ class MeleeMinion(pygame.sprite.Sprite):
         self.damage = 2
         self.speed = 3
         
-        # Red/Pink body with spiky horn
         pygame.draw.rect(self.image, (255, 30, 100), (4, 8, 22, 22), border_radius=4)
         pygame.draw.polygon(self.image, (255, 200, 0), [(15, 0), (6, 8), (24, 8)])
 
     def take_damage(self, amount):
-        """Applies damage to minion health."""
         self.hp -= amount
 
     def update(self, player_rect, enemy_bullets, dungeon_walls=None):
@@ -44,6 +42,9 @@ class MeleeMinion(pygame.sprite.Sprite):
                     if self.rect.colliderect(wall):
                         if move_y > 0: self.rect.bottom = wall.top
                         elif move_y < 0: self.rect.top = wall.bottom
+
+        # Clamp minion inside map bounds (2000x2000)
+        self.rect.clamp_ip(pygame.Rect(0, 0, 2000, 2000))
 
     def draw(self, surface, cam_x=0, cam_y=0):
         surface.blit(self.image, (self.rect.x - cam_x, self.rect.y - cam_y))
@@ -69,7 +70,6 @@ class RangedMinion(pygame.sprite.Sprite):
         pygame.draw.circle(self.image, (0, 100, 200), (15, 15), 14, width=2)
 
     def take_damage(self, amount):
-        """Applies damage to minion health."""
         self.hp -= amount
 
     def update(self, player_rect, enemy_bullets, dungeon_walls=None):
@@ -94,6 +94,9 @@ class RangedMinion(pygame.sprite.Sprite):
                     if self.rect.colliderect(wall):
                         if move_y > 0: self.rect.bottom = wall.top
                         elif move_y < 0: self.rect.top = wall.bottom
+
+        # Clamp minion inside map bounds (2000x2000)
+        self.rect.clamp_ip(pygame.Rect(0, 0, 2000, 2000))
 
         self.timer += 1
         if self.timer >= self.shoot_cooldown:
