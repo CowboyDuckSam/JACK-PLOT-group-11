@@ -105,11 +105,15 @@ while running:
             if len(player.deck) < getattr(player, "MAX_HAND_SIZE", 5):
                 player.deck.append(random.choice(SUITS))
 
-        # --- ENEMY SPAWN TIMER ---
+        # --- ENEMY SPAWN TIMER (FIXED IN-BOUNDS COORDINATES) ---
         if event.type == SPAWN_ENEMY_EVENT and current_state == DUNGEON_ROOM:
             if not boss_spawned and len(active_enemies) < 5:
-                spawn_x = player.rect.centerx + random.choice([-400, 400])
-                spawn_y = player.rect.centery + random.choice([-400, 400])
+                offset_x = random.choice([-350, -250, 250, 350])
+                offset_y = random.choice([-350, -250, 250, 350])
+
+                # Clamp spawn coordinates strictly inside the 2000x2000 map
+                spawn_x = max(100, min(player.rect.centerx + offset_x, 1900))
+                spawn_y = max(100, min(player.rect.centery + offset_y, 1900))
 
                 if random.random() < 0.5:
                     active_enemies.append(MeleeMinion(spawn_x, spawn_y))
@@ -394,7 +398,6 @@ while running:
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
 
-                            # Trigger Boss Spawn upon reaching kill limit
                             if minions_killed >= minions_total and not boss_spawned:
                                 boss_spawned = True
                                 audio.play_sfx("boss_spawn")
@@ -443,7 +446,7 @@ while running:
             # --- BOSS SPAWNING & COMBAT COLLISIONS ---
             # =========================================================
             if boss_spawned and not active_boss:
-                active_enemies.clear() # Clear minions when boss appears
+                active_enemies.clear()
                 if current_floor == 1:
                     active_boss = PiggyBankWalletBoss(WIDTH // 2, HEIGHT // 2)
                 elif current_floor == 2:
