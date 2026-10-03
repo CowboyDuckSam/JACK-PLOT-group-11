@@ -9,6 +9,8 @@ from environment import DungeonEnvironment
 from shop import NeonShop
 from audio_manager import AudioManager
 from combat import SpadeProjectile, ClubSlash, LaserBeam, Token
+from enemy import MeleeMinion, RangedMinion, EnemyBullet
+from Boss import PiggyBankWalletBoss, OverdueBillBoss
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
@@ -16,12 +18,15 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("JACK PLOT!!!")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("Arial", 36)
+active_enemies = []
+enemy_bullets = []
+active_boss = None
 
 # --- COMBAT TRACKING & TIMERS ---
 SPAWN_CARD_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(SPAWN_CARD_EVENT, 500)
 
-# Student 2's new enemy spawn timer
+# Sam's new enemy spawn timer
 SPAWN_ENEMY_EVENT = pygame.USEREVENT + 2
 pygame.time.set_timer(SPAWN_ENEMY_EVENT, 2000)
 
@@ -99,6 +104,17 @@ while running:
         if event.type == SPAWN_CARD_EVENT and current_state == DUNGEON_ROOM:
             if len(player.deck) < getattr(player, "MAX_HAND_SIZE", 5):
                 player.deck.append(random.choice(SUITS))
+        # --- ENEMY SPAWN TIMER ---
+        if event.type == SPAWN_ENEMY_EVENT and current_state == DUNGEON_ROOM:
+            if not boss_spawned and len(active_enemies) < 5:
+                spawn_x = player.rect.centerx + random.choice([-400, 400])
+                spawn_y = player.rect.centery + random.choice([-400, 400])
+
+                if random.random() < 0.5:
+                    active_enemies.append(MeleeMinion(spawn_x, spawn_y))
+                else:
+                    active_enemies.append(RangedMinion(spawn_x, spawn_y))
+
 
         # --- RELEASE LEFT CLICK: EXECUTE SINGLE CARD IF NOT CHARGING ---
         if current_state == DUNGEON_ROOM and event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -333,6 +349,17 @@ while running:
                     player.tokens += 1
                     dropped_tokens.remove(t)
 
+            for enemy in active_enemies[:]:
+                enemy.update(player.rect, enemy_bullets)
+
+            if active_boss and active_boss.is_alive:
+                active_boss.update(player.rect, enemy_bullets)
+
+            for eb in enemy_bullets[:]:
+                eb.update()
+                if getattr(eb, 'lifetime', 1) <= 0:
+                    enemy_bullets.remove(eb)
+
     # rendering
     screen.fill(BG_COLORS.get(current_state, (0, 0, 0)))
 
@@ -405,6 +432,19 @@ while running:
         for proj in projectiles: proj.draw(screen, cam_x, cam_y)
         for slash in slashes: slash.draw(screen, cam_x, cam_y)
         for laser in active_lasers: laser.draw(screen, cam_x, cam_y)
+
+        # Draw Enemy AI
+        for eb in enemy_bullets:
+            eb.draw(screen, cam_x, cam_y)
+        for enemy in active_enemies:
+            enemy.draw(screen, cam_x, cam_y)
+
+        if active_boss and active_boss.is_alive:
+            active_boss.draw(screen, cam_x, cam_y)
+
+        # Draw Player
+        offset_player = player.rect.move(-cam_x, -cam_y)
+        screen.blit(player.surface, offset_player)
 
         # Draw Player
         offset_player = player.rect.move(-cam_x, -cam_y)
