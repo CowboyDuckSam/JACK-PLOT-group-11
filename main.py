@@ -10,6 +10,7 @@ from shop import NeonShop
 from audio_manager import AudioManager
 from combat import SpadeProjectile, ClubSlash, LaserBeam, Token
 
+pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("JACK PLOT!!!")
@@ -19,6 +20,11 @@ font = pygame.font.SysFont("Arial", 36)
 # --- COMBAT TRACKING & TIMERS ---
 SPAWN_CARD_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(SPAWN_CARD_EVENT, 500)
+
+# Student 2's new enemy spawn timer
+SPAWN_ENEMY_EVENT = pygame.USEREVENT + 2
+pygame.time.set_timer(SPAWN_ENEMY_EVENT, 2000)
+
 SUITS = ["SPADE", "HEART", "CLUB", "DIAMOND"]
 
 projectiles = []
@@ -101,12 +107,19 @@ while running:
                     current_card = player.deck.pop(0)
                     if current_card == "SPADE":
                         projectiles.append(SpadeProjectile(player.rect.centerx, player.rect.centery, player.angle))
+                        audio.play_sfx("spade")
                     elif current_card == "HEART":
                         player.use_heart_shield()
+                        audio.play_sfx("heart")
                     elif current_card == "CLUB":
                         slashes.append(ClubSlash(player.rect.centerx, player.rect.centery, player.angle))
+                        audio.play_sfx("club")
                     elif current_card == "DIAMOND":
                         player.use_diamond_dash(pygame.key.get_pressed())
+                        audio.play_sfx("diamond")
+
+            is_charging = False
+            charge_timer = 0
 
             is_charging = False
             charge_timer = 0
@@ -294,6 +307,7 @@ while running:
                     if charge_timer >= CHARGE_REQ:
                         for _ in range(4): player.deck.pop(0)
                         active_lasers.append(LaserBeam(player))
+                        audio.play_sfx("laser")
                         is_charging = False
                         charge_timer = 0
             else:
