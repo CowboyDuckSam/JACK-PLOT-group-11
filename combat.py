@@ -8,7 +8,6 @@ COLOR_LASER = (0, 255, 255)
 COLOR_TOKEN_OUTER = (140, 20, 220)
 COLOR_TOKEN_INNER = (255, 215, 0)
 
-
 class SpadeProjectile:
     """Ranged arrow shot dealing 20 damage."""
     def __init__(self, x, y, angle):
@@ -16,12 +15,12 @@ class SpadeProjectile:
         self.y = y
         self.angle = angle
         self.speed = 12
-        self.damage = 20  # Spade = 20 Damage
+        self.damage = 20
         self.lifetime = 60
-
         rad = math.radians(self.angle)
         self.dx = math.cos(rad) * self.speed
         self.dy = math.sin(rad) * self.speed
+        self.hit_targets = set()
 
     def update(self):
         self.x += self.dx
@@ -44,10 +43,11 @@ class ClubSlash:
         self.x = x
         self.y = y
         self.angle = angle
-        self.damage = 15  # Club = 15 Damage
+        self.damage = 15
         self.lifetime = 10
         self.reach = 65
         self.spread = 0.6
+        self.hit_targets = set()
 
     def update(self):
         self.lifetime -= 1
@@ -85,11 +85,10 @@ class LaserBeam:
 class Token:
     """Gambling chip token with magnetic attraction."""
     def __init__(self, x, y):
-        self.x = x
-        self.y = y
+        self.x = float(x)
+        self.y = float(y)
         self.radius = 8
         self.rect = pygame.Rect(x - self.radius, y - self.radius, self.radius * 2, self.radius * 2)
-
         self.vx = random.uniform(-4, 4)
         self.vy = random.uniform(-4, 4)
         self.friction = 0.88

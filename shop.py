@@ -46,7 +46,7 @@ class NeonShop:
                     (self.btn_next.x + 20, self.btn_next.y + 10))
 
     def handle_click(self, mx, my, player):
-        # Check Heal Button
+        # Check Heal Button (+20 HP Healing)
         if self.btn_heal.collidepoint(mx, my):
             if player.tokens >= 15:
                 if player.health < player.max_health:
@@ -58,19 +58,19 @@ class NeonShop:
             else:
                 self.message = "Not enough tokens!"
 
-        # Check Max HP Button
+        # Check Max HP Button (Increases pool ceiling + grants extra health bonus)
         elif self.btn_max_hp.collidepoint(mx, my):
             if player.tokens >= 30:
                 player.tokens -= 30
                 player.max_health += 10
-                player.health += 10  # Give them the new HP instantly
+                player.health += 10  # Expands current health pool alongside the maximum ceiling
                 self.message = "Max Health Increased!"
             else:
                 self.message = "Not enough tokens!"
 
         # Check Next Floor Button
         elif self.btn_next.collidepoint(mx, my):
-            self.message = "Spend your tokens to upgrade Jack!"  # Reset message
+            self.message = "Spend your tokens to upgrade Jack!"
             return "NEXT_FLOOR"
 
         return None

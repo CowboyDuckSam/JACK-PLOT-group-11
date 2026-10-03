@@ -4,6 +4,7 @@ import os
 
 class AudioManager:
     def __init__(self):
+        self.sfx_cache = {}
         try:
             pygame.mixer.init()
             self.audio_enabled = True
@@ -15,13 +16,18 @@ class AudioManager:
 
     def play_sfx(self, sound_name):
         if not self.audio_enabled: return
-        print(f"🔊 [SFX] Played: {sound_name}")
 
-        filepath = f"assets/{sound_name}.wav"
-        if os.path.exists(filepath):
-            sound = pygame.mixer.Sound(filepath)
-            sound.set_volume(1.0)  # Make sure SFX are at 100% volume
-            sound.play()
+        if sound_name not in self.sfx_cache:
+            filepath = f"assets/{sound_name}.wav"
+            if os.path.exists(filepath):
+                self.sfx_cache[sound_name] = pygame.mixer.Sound(filepath)
+                self.sfx_cache[sound_name].set_volume(1.0)
+            else:
+                print(f"Warning: Missing SFX asset: {filepath}")
+                return
+
+        print(f"🔊 [SFX] Played: {sound_name}")
+        self.sfx_cache[sound_name].play()
 
     def play_bgm(self, track_name):
         if not self.audio_enabled: return
@@ -34,8 +40,5 @@ class AudioManager:
         filepath = f"assets/{track_name}.mp3"
         if os.path.exists(filepath):
             pygame.mixer.music.load(filepath)
-
-            # Lower the music to 30% volume so the sound effects cut through!
             pygame.mixer.music.set_volume(0.3)
-
             pygame.mixer.music.play(-1)

@@ -4,12 +4,10 @@ import random
 import os
 import pygame
 
-# Import abilities, enemies, and bosses
 from combat import SpadeProjectile, ClubSlash, LaserBeam, Token
 from enemy import MeleeMinion, RangedMinion
 from Boss import PiggyBankWalletBoss, OverdueBillBoss, InterestRateBoss, CommonSenseBoss
 
-# 1. INITIALIZATION & SETUP
 pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
 
@@ -18,7 +16,6 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("JACK PLOT")
 clock = pygame.time.Clock()
 
-# --- COLOR PALETTE ---
 COLOR_BG = (20, 15, 30)
 COLOR_PLAYER = (240, 240, 240)
 COLOR_DIAMOND = (255, 60, 60)
@@ -36,7 +33,6 @@ SUIT_COLORS = {
     "DIAMOND": COLOR_DIAMOND
 }
 
-# --- AUDIO ASSETS ---
 ASSET_DIR = os.path.join(os.path.dirname(__file__), "sound_assets")
 
 try:
@@ -120,13 +116,12 @@ class Player:
             pygame.draw.circle(surface, COLOR_HEART, self.rect.center, 28, width=3)
 
 
-# Setup Game Entities
 player = Player(WIDTH // 2, HEIGHT // 2)
 projectiles = []
 slashes = []
 active_lasers = []
 minions = [MeleeMinion(200, 150), RangedMinion(700, 150)]
-current_boss = PiggyBankWalletBoss(WIDTH // 2, 100)  # Level 1 Boss (200 HP)
+current_boss = PiggyBankWalletBoss(WIDTH // 2, 100)
 
 tokens = []
 player_tokens = 0
@@ -141,7 +136,6 @@ is_charging = False
 
 font = pygame.font.SysFont("Arial", 14, bold=True)
 
-# MAIN GAME LOOP
 running = True
 while running:
     mouse_pos = pygame.mouse.get_pos()
@@ -155,12 +149,8 @@ while running:
         if event.type == SPAWN_CARD_EVENT and len(card_hand) < MAX_HAND_SIZE:
             card_hand.append(random.choice(SUITS))
 
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            for _ in range(5):
-                tokens.append(Token(player.rect.centerx, player.rect.centery))
-
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            if len(active_lasers) == 0 and is_charging and charge_timer < CHARGE_REQ:
+            if len(active_lasers) == 0 and charge_timer < CHARGE_REQ:
                 if len(card_hand) > 0:
                     current_card = card_hand.pop(0)
 
@@ -177,14 +167,12 @@ while running:
                         player.use_diamond_dash(keys)
                         SOUND_DIAMOND.play()
 
-                    # Trigger CommonSenseBoss copied attack
                     if isinstance(current_boss, CommonSenseBoss) and current_boss.is_alive:
                         current_boss.on_player_attack()
 
             is_charging = False
             charge_timer = 0
 
-    # Charge Laser
     if mouse_buttons[0] and len(active_lasers) == 0:
         if len(card_hand) >= 4:
             is_charging = True
@@ -203,10 +191,9 @@ while running:
             is_charging = False
             charge_timer = 0
 
-    # --- UPDATES & COLLISION LINKING ---
     player.update(keys, mouse_pos)
 
-    # 1. SPADE DAMAGE COLLISION (20 DMG)
+    # Spade Damage
     for proj in projectiles[:]:
         proj.update()
         if proj.lifetime <= 0 or not screen.get_rect().collidepoint(proj.x, proj.y):
@@ -215,17 +202,15 @@ while running:
 
         proj_rect = pygame.Rect(proj.x - 8, proj.y - 8, 16, 16)
 
-        # Damage Minions
         for minion in minions[:]:
             if proj_rect.colliderect(minion.rect):
-                minion.take_damage(20)  # Spade = 20 DMG
+                minion.take_damage(20)
                 if minion.hp <= 0:
                     for _ in range(5): tokens.append(Token(minion.rect.centerx, minion.rect.centery))
                     minions.remove(minion)
                 if proj in projectiles: projectiles.remove(proj)
                 break
 
-        # Damage Bosses
         if current_boss and current_boss.is_alive and proj in projectiles:
             if isinstance(current_boss, PiggyBankWalletBoss):
                 if current_boss.piggy_alive and proj_rect.colliderect(current_boss.piggy_rect):
@@ -238,7 +223,7 @@ while running:
                 current_boss.take_damage(20)
                 projectiles.remove(proj)
 
-    # 2. CLUB SLASH DAMAGE COLLISION (15 DMG)
+    # Club Slash
     for slash in slashes[:]:
         slash.update()
         if slash.lifetime <= 0:
@@ -249,7 +234,7 @@ while running:
 
         for minion in minions[:]:
             if slash_rect.colliderect(minion.rect):
-                minion.take_damage(15)  # Club = 15 DMG
+                minion.take_damage(15)
                 if minion.hp <= 0:
                     for _ in range(5): tokens.append(Token(minion.rect.centerx, minion.rect.centery))
                     minions.remove(minion)
@@ -263,7 +248,7 @@ while running:
             elif slash_rect.colliderect(current_boss.rect):
                 current_boss.take_damage(15)
 
-    # 3. LASER BEAM DAMAGE COLLISION
+    # Laser Beam
     for laser in active_lasers[:]:
         laser.update()
         if laser.lifetime <= 0:
@@ -291,18 +276,15 @@ while running:
             elif current_boss.rect.clipline(start_pos, (end_x, end_y)):
                 current_boss.take_damage(1)
 
-    # Update Enemies & Bosses
     for minion in minions: minion.update(player.rect, [])
     if current_boss and current_boss.is_alive: current_boss.update(player.rect)
 
-    # Update Tokens
     for token in tokens[:]:
         token.update(player.rect)
         if player.rect.colliderect(token.rect):
             player_tokens += 1
             tokens.remove(token)
 
-    # --- RENDERING ---
     screen.fill(COLOR_BG)
 
     for laser in active_lasers: laser.draw(screen)
@@ -314,10 +296,9 @@ while running:
 
     for minion in minions: minion.draw(screen)
     if current_boss and current_boss.is_alive:
-        screen.blit(current_boss.image, current_boss.rect)
+        current_boss.draw(screen)
         current_boss.draw_healthbar(screen)
 
-    # Charge Ring Indicator
     if is_charging and charge_timer > 0:
         charge_ratio = charge_timer / CHARGE_REQ
         pygame.draw.circle(screen, (80, 80, 80), player.rect.center, 36, width=2)
@@ -325,7 +306,6 @@ while running:
         if fill_radius > 0:
             pygame.draw.circle(screen, COLOR_LASER, player.rect.center, fill_radius, width=2)
 
-    # HUD Card Queue
     hud_x = 20
     hud_y = HEIGHT - 70
     text_surf = font.render("CARD QUEUE (Left Click = Use | Hold 3s = Laser):", True, (200, 200, 200))
@@ -339,7 +319,6 @@ while running:
         card_txt = font.render(suit[:4], True, card_color)
         screen.blit(card_txt, (box_rect.x + 5, box_rect.y + 16))
 
-    # HUD Token Counter
     token_str = f"TOKENS: {player_tokens}"
     token_surf = font.render(token_str, True, COLOR_TOKEN_INNER)
     token_rect = token_surf.get_rect(topright=(WIDTH - 20, 20))

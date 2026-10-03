@@ -1,6 +1,7 @@
 import pygame
 import math
 
+
 class Player:
     def __init__(self, x, y):
         self.surface = pygame.Surface((50, 50), pygame.SRCALPHA)
@@ -19,15 +20,19 @@ class Player:
         self.deck = []
         self.MAX_HAND_SIZE = 5
 
-        # Combat Mechanics
+        # Combat Mechanics & i-Frames
         self.angle = 0.0
         self.shield_hp = 0
         self.is_dashing = False
         self.dash_timer = 0
         self.dash_dir = pygame.math.Vector2(0, 0)
         self.dash_speed = 1000
+        self.i_frames = 0.0
 
     def update(self, dt, keys, walls, mouse_pos, cam_x, cam_y):
+        if self.i_frames > 0:
+            self.i_frames -= dt
+
         # Aiming calculation based on camera offset
         world_mouse_x = mouse_pos[0] + cam_x
         world_mouse_y = mouse_pos[1] + cam_y
@@ -45,10 +50,16 @@ class Player:
             if self.dash_timer <= 0:
                 self.is_dashing = False
         else:
-            if keys[pygame.K_LEFT] or keys[pygame.K_a]: self.pos_x -= self.speed * dt
-            if keys[pygame.K_RIGHT] or keys[pygame.K_d]: self.pos_x += self.speed * dt
-            if keys[pygame.K_UP] or keys[pygame.K_w]: self.pos_y -= self.speed * dt
-            if keys[pygame.K_DOWN] or keys[pygame.K_s]: self.pos_y += self.speed * dt
+            move_vec = pygame.math.Vector2(0, 0)
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]: move_vec.x -= 1
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]: move_vec.x += 1
+            if keys[pygame.K_UP] or keys[pygame.K_w]: move_vec.y -= 1
+            if keys[pygame.K_DOWN] or keys[pygame.K_s]: move_vec.y += 1
+
+            if move_vec.length_squared() > 0:
+                move_vec = move_vec.normalize()
+                self.pos_x += move_vec.x * self.speed * dt
+                self.pos_y += move_vec.y * self.speed * dt
 
         self.rect.x = int(self.pos_x)
         self.rect.y = int(self.pos_y)
@@ -64,6 +75,21 @@ class Player:
                 self.pos_x, self.pos_y = old_x, old_y
                 self.rect.x, self.rect.y = int(self.pos_x), int(self.pos_y)
                 break
+
+    def take_damage(self, amount):
+        if self.i_frames > 0:
+            return False
+
+        if self.shield_hp > 0:
+            self.shield_hp -= amount
+            if self.shield_hp < 0:
+                self.health += self.shield_hp
+                self.shield_hp = 0
+        else:
+            self.health -= amount
+
+        self.i_frames = 0.5  # half second invincibility
+        return True
 
     def use_diamond_dash(self, keys):
         if self.is_dashing: return
@@ -86,12 +112,10 @@ class Player:
         self.shield_hp = 20
 
     def draw_extras(self, surface, offset_rect):
-        # Draw the directional aim line
         rad = math.radians(self.angle)
         end_x = offset_rect.centerx + math.cos(rad) * 35
         end_y = offset_rect.centery + math.sin(rad) * 35
         pygame.draw.line(surface, (0, 0, 0), offset_rect.center, (end_x, end_y), 4)
 
-        # Draw the active heart shield
         if self.shield_hp > 0:
             pygame.draw.circle(surface, (255, 100, 150), offset_rect.center, 35, width=3)

@@ -15,15 +15,19 @@ from Boss import PiggyBankWalletBoss, OverdueBillBoss, InterestRateBoss, CommonS
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
+
+# Corrected scaling flags
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.SCALED | pygame.RESIZABLE)
 pygame.display.set_caption("JACK PLOT!!!")
 clock = pygame.time.Clock()
+
+# Initializing font globally to prevent per-frame recreation
 font = pygame.font.SysFont("Arial", 36)
+
 active_enemies = []
 enemy_bullets = []
 active_boss = None
 
-# --- COMBAT TRACKING & TIMERS ---
 SPAWN_CARD_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(SPAWN_CARD_EVENT, 500)
 
@@ -41,7 +45,6 @@ charge_timer = 0.0
 CHARGE_REQ = 3.0
 is_charging = False
 
-# starting right at the boot menu
 current_state = START_MENU
 is_guest = False
 login_manager = LoginManager(font, WIDTH, HEIGHT)
@@ -60,9 +63,23 @@ minions_killed = 0
 minions_total = 10
 boss_spawned = False
 
-# game juice timers
 shake_timer = 0.0
 flash_timer = 0.0
+
+
+def reset_game_state():
+    global active_enemies, enemy_bullets, active_boss, projectiles, slashes, active_lasers, dropped_tokens
+    global current_floor, minions_killed, minions_total, boss_spawned
+    active_enemies.clear()
+    enemy_bullets.clear()
+    projectiles.clear()
+    slashes.clear()
+    active_lasers.clear()
+    dropped_tokens.clear()
+    active_boss = None
+    minions_killed = 0
+    boss_spawned = False
+    minions_total = current_floor * 10  # Scales dynamically per floor!
 
 
 def draw_text_center(text, y_offset=0):
@@ -74,7 +91,6 @@ def draw_text_center(text, y_offset=0):
 dt = 0
 running = True
 while running:
-    # handle background music automatically
     if current_state in (START_MENU, LOGIN_SCREEN, CHAR_SELECT, LEVEL_SELECT):
         audio.play_bgm("menu_theme")
     elif current_state == DUNGEON_ROOM:
@@ -86,7 +102,6 @@ while running:
     elif current_state == VICTORY_SCREEN:
         audio.play_bgm("victory_fanfare")
 
-    # event queue
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -100,29 +115,25 @@ while running:
                 player.health = login_manager.saved_data.get("health", 100)
                 current_state = CHAR_SELECT
 
-        # --- TIMER EVENT: GENERATE CARD EVERY 0.5 SECONDS ---
         if event.type == SPAWN_CARD_EVENT and current_state == DUNGEON_ROOM:
             if len(player.deck) < getattr(player, "MAX_HAND_SIZE", 5):
                 player.deck.append(random.choice(SUITS))
 
-        # --- ENEMY SPAWN TIMER (FIXED IN-BOUNDS COORDINATES) ---
         if event.type == SPAWN_ENEMY_EVENT and current_state == DUNGEON_ROOM:
-            if not boss_spawned and len(active_enemies) < 5:
+            if not boss_spawned and len(active_enemies) < 5 + current_floor:
                 offset_x = random.choice([-350, -250, 250, 350])
                 offset_y = random.choice([-350, -250, 250, 350])
 
-                # Clamp spawn coordinates strictly inside the 2000x2000 map
                 spawn_x = max(100, min(player.rect.centerx + offset_x, 1900))
                 spawn_y = max(100, min(player.rect.centery + offset_y, 1900))
 
                 if random.random() < 0.5:
-                    active_enemies.append(MeleeMinion(spawn_x, spawn_y))
+                    active_enemies.append(MeleeMinion(spawn_x, spawn_y, floor=current_floor))
                 else:
-                    active_enemies.append(RangedMinion(spawn_x, spawn_y))
+                    active_enemies.append(RangedMinion(spawn_x, spawn_y, floor=current_floor))
 
-        # --- RELEASE LEFT CLICK: EXECUTE SINGLE CARD IF NOT CHARGING ---
         if current_state == DUNGEON_ROOM and event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            if not fate_wheel.active and len(active_lasers) == 0 and is_charging and charge_timer < CHARGE_REQ:
+            if not fate_wheel.active and len(active_lasers) == 0 and charge_timer < CHARGE_REQ:
                 if len(player.deck) > 0:
                     current_card = player.deck.pop(0)
                     if current_card == "SPADE":
@@ -138,11 +149,13 @@ while running:
                         player.use_diamond_dash(pygame.key.get_pressed())
                         audio.play_sfx("diamond")
 
+                    if active_boss and isinstance(active_boss, CommonSenseBoss) and active_boss.is_alive:
+                        active_boss.on_player_attack()
+
             is_charging = False
             charge_timer = 0.0
 
-        # dev test keys
-        if event.type == pygame.KEYDOWN:
+        if event.type == pygame.KEYDOWN and current_state == DUNGEON_ROOM:
             if event.key == pygame.K_1:
                 current_state = LEVEL_SELECT
             elif event.key == pygame.K_2:
@@ -153,53 +166,41 @@ while running:
                 current_state = GAMEOVER_SCREEN
             elif event.key == pygame.K_5:
                 current_state = VICTORY_SCREEN
-
-            # test key to take damage and test the failure screen
-            elif event.key == pygame.K_h and current_state == DUNGEON_ROOM:
-                player.health -= 25
-                audio.play_sfx("jack_hurt")
-                shake_timer = 0.3
-                flash_timer = 0.15
-
-            # fate wheel & cheat keys
-            if current_state == DUNGEON_ROOM:
-                if event.key == pygame.K_r and not fate_wheel.active:
+            elif event.key == pygame.K_h:
+                if player.take_damage(25):
+                    audio.play_sfx("jack_hurt")
+                    shake_timer = 0.3
+                    flash_timer = 0.15
+            elif event.key == pygame.K_r and not fate_wheel.active:
+                audio.play_sfx("wheel_open")
+                fate_wheel.open()
+            elif event.key == pygame.K_k and not boss_spawned:
+                minions_killed += 1
+                player.tokens += 5
+                dropped_tokens.append(Token(player.rect.centerx + random.randint(-50, 50),
+                                            player.rect.centery + random.randint(-50, 50)))
+                audio.play_sfx("enemy_hit")
+                if minions_killed % 5 == 0 and not fate_wheel.active:
                     audio.play_sfx("wheel_open")
                     fate_wheel.open()
+                if minions_killed >= minions_total:
+                    audio.play_sfx("boss_spawn")
+                    boss_spawned = True
+            elif event.key == pygame.K_b and boss_spawned:
+                player.tokens += 75
+                boss_spawned = False
+                minions_killed = 0
+                current_floor += 1
+                minions_total = current_floor * 10
+                audio.play_sfx("boss_dead")
 
-                # simulate killing a minion
-                elif event.key == pygame.K_k and not boss_spawned:
-                    minions_killed += 1
-                    player.tokens += 5
-                    dropped_tokens.append(Token(player.rect.centerx + random.randint(-50, 50),
-                                                player.rect.centery + random.randint(-50, 50)))
-                    audio.play_sfx("enemy_hit")
+                if current_floor > 4:
+                    current_state = VICTORY_SCREEN
+                else:
+                    if not is_guest:
+                        login_manager.save_progress(player, current_floor)
+                    current_state = SHOP_ROOM
 
-                    if minions_killed % 5 == 0 and not fate_wheel.active:
-                        audio.play_sfx("wheel_open")
-                        fate_wheel.open()
-
-                    if minions_killed >= minions_total:
-                        audio.play_sfx("boss_spawn")
-                        boss_spawned = True
-
-                # simulate killing the boss
-                elif event.key == pygame.K_b and boss_spawned:
-                    player.tokens += 75
-                    boss_spawned = False
-                    minions_killed = 0
-                    current_floor += 1
-                    minions_total = current_floor * 10
-                    audio.play_sfx("boss_dead")
-
-                    if current_floor > 4:
-                        current_state = VICTORY_SCREEN
-                    else:
-                        if not is_guest:
-                            login_manager.save_progress(player, current_floor)
-                        current_state = SHOP_ROOM
-
-        # mouse clicks
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 mx, my = event.pos
@@ -220,6 +221,7 @@ while running:
                         btn = pygame.Rect(WIDTH // 2 - 250 + (i * 130), HEIGHT // 2 - 40, 100, 80)
                         if btn.collidepoint(mx, my) and floor_num == current_floor:
                             audio.play_sfx("enter_dungeon")
+                            reset_game_state()
                             current_state = DUNGEON_ROOM
 
                 elif current_state == CHAR_SELECT:
@@ -274,30 +276,28 @@ while running:
                         audio.play_sfx("enter_dungeon")
                         if not is_guest:
                             login_manager.save_progress(player, current_floor)
+                        reset_game_state()
                         current_state = LEVEL_SELECT
                     elif action:
                         audio.play_sfx("buy_item")
 
                 elif current_state in (GAMEOVER_SCREEN, VICTORY_SCREEN):
                     audio.play_sfx("click_restart")
+
+                    if not is_guest and current_state == GAMEOVER_SCREEN:
+                        login_manager.save_progress(player, current_floor, is_death=True)
+
                     player.health = 100
                     player.max_health = 100
                     player.tokens = 0
                     current_floor = 1
-                    minions_killed = 0
-                    boss_spawned = False
                     player.deck.clear()
-
-                    if not is_guest:
-                        login_manager.save_progress(player, current_floor)
+                    reset_game_state()
 
                     current_state = START_MENU
 
-    # update loop & timer logic
-    if shake_timer > 0:
-        shake_timer -= dt
-    if flash_timer > 0:
-        flash_timer -= dt
+    if shake_timer > 0: shake_timer -= dt
+    if flash_timer > 0: flash_timer -= dt
 
     keys = pygame.key.get_pressed()
     if current_state == DUNGEON_ROOM:
@@ -310,13 +310,11 @@ while running:
         if fate_wheel.active:
             fate_wheel.update(dt)
             if not fate_wheel.spinning and fate_wheel.result_index is not None and not fate_wheel.result_applied:
-                result = fate_wheel.apply_result(player.tokens, getattr(player, "deck", []))
-                if result:
-                    label, player.tokens = result
+                fate_wheel.apply_result(player)
         else:
-            # --- HOLD LEFT CLICK CHARGE LASER ---
             mouse_buttons = pygame.mouse.get_pressed()
-            if mouse_buttons[0]:
+
+            if mouse_buttons[0] and len(active_lasers) == 0:
                 if len(player.deck) >= 4:
                     is_charging = True
                     charge_timer += dt
@@ -330,24 +328,25 @@ while running:
                 is_charging = False
                 charge_timer = 0
 
-            # --- PLAYER MOVEMENT ---
             player.update(dt, keys, dungeon_walls, pygame.mouse.get_pos(), cam_x, cam_y)
 
-            # --- UPDATE PROJECTILES & TOKENS ---
             for laser in active_lasers[:]:
                 laser.update()
-                if laser.lifetime <= 0:
-                    active_lasers.remove(laser)
+                if laser.lifetime <= 0: active_lasers.remove(laser)
 
             for proj in projectiles[:]:
                 proj.update()
-                if proj.lifetime <= 0:
-                    projectiles.remove(proj)
+                if proj.lifetime <= 0: projectiles.remove(proj)
+
+                # Check projectile wall collisions
+                proj_rect = pygame.Rect(proj.x - 8, proj.y - 8, 16, 16)
+                if any(proj_rect.colliderect(wall) for wall in dungeon_walls):
+                    if proj in projectiles: projectiles.remove(proj)
+                    continue
 
             for slash in slashes[:]:
                 slash.update()
-                if slash.lifetime <= 0:
-                    slashes.remove(slash)
+                if slash.lifetime <= 0: slashes.remove(slash)
 
             for t in dropped_tokens[:]:
                 t.update(player.rect)
@@ -355,73 +354,67 @@ while running:
                     player.tokens += 1
                     dropped_tokens.remove(t)
 
-            # --- ENEMY UPDATES & CONTACT DAMAGE TO PLAYER ---
             for enemy in active_enemies[:]:
                 enemy.update(player.rect, enemy_bullets, dungeon_walls)
-                
-                # Direct contact damage
                 if player.rect.colliderect(enemy.rect):
-                    player.health -= getattr(enemy, 'damage', 1)
-                    audio.play_sfx("jack_hurt")
-                    shake_timer = 0.2
-                    flash_timer = 0.1
+                    if player.take_damage(getattr(enemy, 'damage', 10)):
+                        audio.play_sfx("jack_hurt")
+                        shake_timer = 0.2
+                        flash_timer = 0.1
 
-            # --- ENEMY BULLET HITS ON PLAYER ---
             for eb in enemy_bullets[:]:
                 eb.update()
                 if eb.rect.colliderect(player.rect):
-                    player.health -= getattr(eb, 'damage', 5)
-                    audio.play_sfx("jack_hurt")
-                    shake_timer = 0.2
-                    flash_timer = 0.1
+                    if player.take_damage(getattr(eb, 'damage', 5)):
+                        audio.play_sfx("jack_hurt")
+                        shake_timer = 0.2
+                        flash_timer = 0.1
                     enemy_bullets.remove(eb)
                 elif getattr(eb, 'lifetime', 1) <= 0:
                     enemy_bullets.remove(eb)
+                elif any(eb.rect.colliderect(wall) for wall in dungeon_walls):
+                    enemy_bullets.remove(eb)
 
-            # =========================================================
-            # --- PLAYER ATTACK DAMAGE HITS ON MINIONS ---
-            # =========================================================
-
-            # 1. Spade Projectile Hits (20 DMG)
             for proj in projectiles[:]:
                 proj_rect = pygame.Rect(proj.x - 8, proj.y - 8, 16, 16)
                 for enemy in active_enemies[:]:
-                    if proj_rect.colliderect(enemy.rect):
-                        enemy.hp -= 20
-                        if proj in projectiles:
-                            projectiles.remove(proj)
+                    if proj_rect.colliderect(enemy.rect) and enemy not in proj.hit_targets:
+                        proj.hit_targets.add(enemy)
+                        enemy.take_damage(20)
+                        if proj in projectiles: projectiles.remove(proj)
                         audio.play_sfx("enemy_hit")
                         if enemy.hp <= 0:
-                            if enemy in active_enemies:
-                                active_enemies.remove(enemy)
+                            if enemy in active_enemies: active_enemies.remove(enemy)
                             minions_killed += 1
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
+
+                            if minions_killed % 5 == 0 and not fate_wheel.active and not boss_spawned:
+                                audio.play_sfx("wheel_open")
+                                fate_wheel.open()
 
                             if minions_killed >= minions_total and not boss_spawned:
                                 boss_spawned = True
                                 audio.play_sfx("boss_spawn")
                         break
 
-            # 2. Club Slash Hits (15 DMG)
             for slash in slashes[:]:
                 slash_rect = pygame.Rect(slash.x - slash.reach, slash.y - slash.reach, slash.reach * 2, slash.reach * 2)
                 for enemy in active_enemies[:]:
-                    if slash_rect.colliderect(enemy.rect):
-                        enemy.hp -= 15
+                    if slash_rect.colliderect(enemy.rect) and enemy not in slash.hit_targets:
+                        slash.hit_targets.add(enemy)
+                        enemy.take_damage(15)
                         audio.play_sfx("enemy_hit")
                         if enemy.hp <= 0:
-                            if enemy in active_enemies:
-                                active_enemies.remove(enemy)
+                            if enemy in active_enemies: active_enemies.remove(enemy)
                             minions_killed += 1
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
-
                             if minions_killed >= minions_total and not boss_spawned:
                                 boss_spawned = True
                                 audio.play_sfx("boss_spawn")
 
-            # 3. Laser Beam Continuous Hits
+            # Check continuous laser line collisions
             for laser in active_lasers[:]:
                 rad = math.radians(player.angle)
                 start_pos = player.rect.center
@@ -430,23 +423,20 @@ while running:
 
                 for enemy in active_enemies[:]:
                     if enemy.rect.clipline(start_pos, (end_x, end_y)):
-                        enemy.hp -= 1
+                        enemy.take_damage(1)
                         if enemy.hp <= 0:
-                            if enemy in active_enemies:
-                                active_enemies.remove(enemy)
+                            if enemy in active_enemies: active_enemies.remove(enemy)
                             minions_killed += 1
                             player.tokens += 2
                             dropped_tokens.append(Token(enemy.rect.centerx, enemy.rect.centery))
-
                             if minions_killed >= minions_total and not boss_spawned:
                                 boss_spawned = True
                                 audio.play_sfx("boss_spawn")
 
-            # =========================================================
-            # --- BOSS SPAWNING & COMBAT COLLISIONS ---
-            # =========================================================
             if boss_spawned and not active_boss:
                 active_enemies.clear()
+                spawn_bx = player.rect.centerx + 300
+                spawn_by = player.rect.centery
                 if current_floor == 1:
                     active_boss = PiggyBankWalletBoss(WIDTH // 2, HEIGHT // 2)
                 elif current_floor == 2:
@@ -459,7 +449,14 @@ while running:
             if active_boss and active_boss.is_alive:
                 active_boss.update(player.rect)
 
-                # Spade Hits on Boss (20 DMG)
+                for b_bullet in list(active_boss.bullets):
+                    if b_bullet.rect.colliderect(player.rect):
+                        if player.take_damage(getattr(b_bullet, 'damage', 10)):
+                            audio.play_sfx("jack_hurt")
+                            shake_timer = 0.2
+                            flash_timer = 0.1
+                        b_bullet.kill()
+
                 for proj in projectiles[:]:
                     proj_rect = pygame.Rect(proj.x - 8, proj.y - 8, 16, 16)
                     if isinstance(active_boss, PiggyBankWalletBoss):
@@ -476,19 +473,38 @@ while running:
                         if proj in projectiles: projectiles.remove(proj)
                         audio.play_sfx("enemy_hit")
 
-                # Club Slash Hits on Boss (15 DMG)
                 for slash in slashes[:]:
-                    slash_rect = pygame.Rect(slash.x - slash.reach, slash.y - slash.reach, slash.reach * 2, slash.reach * 2)
+                    slash_rect = pygame.Rect(slash.x - slash.reach, slash.y - slash.reach, slash.reach * 2,
+                                             slash.reach * 2)
                     if isinstance(active_boss, PiggyBankWalletBoss):
-                        if active_boss.piggy_alive and slash_rect.colliderect(active_boss.piggy_rect):
+                        if active_boss.piggy_alive and slash_rect.colliderect(
+                                active_boss.piggy_rect) and active_boss not in slash.hit_targets:
+                            slash.hit_targets.add(active_boss)
                             active_boss.take_damage_piggy(15)
                             audio.play_sfx("enemy_hit")
-                        if active_boss.wallet_alive and slash_rect.colliderect(active_boss.wallet_rect):
+                        elif active_boss.wallet_alive and slash_rect.colliderect(
+                                active_boss.wallet_rect) and active_boss not in slash.hit_targets:
+                            slash.hit_targets.add(active_boss)
                             active_boss.take_damage_wallet(15)
                             audio.play_sfx("enemy_hit")
-                    elif slash_rect.colliderect(active_boss.rect):
+                    elif slash_rect.colliderect(active_boss.rect) and active_boss not in slash.hit_targets:
+                        slash.hit_targets.add(active_boss)
                         active_boss.take_damage(15)
                         audio.play_sfx("enemy_hit")
+
+                for laser in active_lasers[:]:
+                    rad = math.radians(player.angle)
+                    start_pos = player.rect.center
+                    end_x = start_pos[0] + math.cos(rad) * laser.beam_length
+                    end_y = start_pos[1] + math.sin(rad) * laser.beam_length
+
+                    if isinstance(active_boss, PiggyBankWalletBoss):
+                        if active_boss.piggy_alive and active_boss.piggy_rect.clipline(start_pos, (end_x, end_y)):
+                            active_boss.take_damage_piggy(1)
+                        if active_boss.wallet_alive and active_boss.wallet_rect.clipline(start_pos, (end_x, end_y)):
+                            active_boss.take_damage_wallet(1)
+                    elif active_boss.rect.clipline(start_pos, (end_x, end_y)):
+                        active_boss.take_damage(1)
 
                 if not active_boss.is_alive:
                     player.tokens += 75
@@ -502,7 +518,6 @@ while running:
                     else:
                         current_state = SHOP_ROOM
 
-    # rendering
     screen.fill(BG_COLORS.get(current_state, (0, 0, 0)))
 
     if current_state == START_MENU:
@@ -539,18 +554,11 @@ while running:
 
     elif current_state == LEVEL_SELECT:
         draw_text_center("SELECT FLOOR", -120)
-
         for i in range(4):
             floor_num = i + 1
             btn = pygame.Rect(WIDTH // 2 - 250 + (i * 130), HEIGHT // 2 - 40, 100, 80)
-
-            if floor_num < current_floor:
-                color = (50, 200, 50)
-            elif floor_num == current_floor:
-                color = (255, 200, 50)
-            else:
-                color = (200, 50, 50)
-
+            color = (50, 200, 50) if floor_num < current_floor else (
+                (255, 200, 50) if floor_num == current_floor else (200, 50, 50))
             pygame.draw.rect(screen, color, btn, border_radius=8)
             pygame.draw.rect(screen, (255, 255, 255), btn, 2, border_radius=8)
             screen.blit(font.render(f"F{floor_num}", True, (255, 255, 255)), (btn.x + 30, btn.y + 20))
@@ -569,29 +577,23 @@ while running:
             offset_wall = wall.move(-cam_x, -cam_y)
             pygame.draw.rect(screen, (100, 100, 100), offset_wall)
 
-        # Draw Combat Entities
         for t in dropped_tokens: t.draw(screen, cam_x, cam_y)
         for proj in projectiles: proj.draw(screen, cam_x, cam_y)
         for slash in slashes: slash.draw(screen, cam_x, cam_y)
         for laser in active_lasers: laser.draw(screen, cam_x, cam_y)
 
-        # Draw Enemy AI
-        for eb in enemy_bullets:
-            eb.draw(screen, cam_x, cam_y)
-        for enemy in active_enemies:
-            enemy.draw(screen, cam_x, cam_y)
+        for eb in enemy_bullets: eb.draw(screen, cam_x, cam_y)
+        for enemy in active_enemies: enemy.draw(screen, cam_x, cam_y)
 
         if active_boss and active_boss.is_alive:
-            screen.blit(active_boss.image, (active_boss.rect.x - cam_x, active_boss.rect.y - cam_y))
-            active_boss.draw_healthbar(screen)
+            active_boss.draw(screen, cam_x, cam_y)
+            active_boss.draw_healthbar(screen, cam_x, cam_y)
 
-        # Draw Player
         offset_player = player.rect.move(-cam_x, -cam_y)
         screen.blit(player.surface, offset_player)
         if hasattr(player, 'draw_extras'):
             player.draw_extras(screen, offset_player)
 
-        # Draw Laser Charge Ring
         if is_charging and charge_timer > 0:
             charge_ratio = min(charge_timer / CHARGE_REQ, 1.0)
             pygame.draw.circle(screen, (80, 80, 80), offset_player.center, 40, width=2)
