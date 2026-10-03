@@ -1,10 +1,13 @@
 import sys
 import math
 import random
+import os 
 import pygame
 #changed a bit to fix some bugs and to look more tidy and easier for me to work on
 # 1. INITIALIZATION & SETUP
+pygame.mixer.pre_init(44100, -16, 2, 512) # Sets frequency, 16-bit sound, stereo (2 channels), buffer size
 pygame.init()
+
 WIDTH, HEIGHT = 960, 540
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("JACK PLOT")
@@ -27,11 +30,33 @@ SUIT_COLORS = {
     "CLUB": COLOR_CLUB,
     "DIAMOND": COLOR_DIAMOND
 }
+# --- LOAD WAV AUDIO ASSETS FROM ASSETS FOLDER ---
+ASSET_DIR = os.path.join(os.path.dirname(__file__), "sound_assets")
+
+try:
+    SOUND_SPADE = pygame.mixer.Sound(os.path.join(ASSET_DIR, "spade.wav"))
+    SOUND_CLUB = pygame.mixer.Sound(os.path.join(ASSET_DIR, "club.wav"))
+    SOUND_HEART = pygame.mixer.Sound(os.path.join(ASSET_DIR, "heart.wav"))
+    SOUND_DIAMOND = pygame.mixer.Sound(os.path.join(ASSET_DIR, "diamond.wav"))
+    SOUND_LASER = pygame.mixer.Sound(os.path.join(ASSET_DIR, "laser.wav"))
+
+    # Adjust volumes (0.0 = silent, 1.0 = full volume)
+    SOUND_SPADE.set_volume(0.5)
+    SOUND_CLUB.set_volume(0.6)
+    SOUND_HEART.set_volume(0.5)
+    SOUND_DIAMOND.set_volume(0.5)
+    SOUND_LASER.set_volume(0.7)
+    
+except pygame.error as e:
+    print(f"Audio Load Error: {e}")
 
 # --- CUSTOM TIMERS & EVENTS ---
 # Trigger event every 500 milliseconds (0.5 seconds)
 SPAWN_CARD_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(SPAWN_CARD_EVENT, 500)
+
+SPAWN_ENEMY_EVENT = pygame.USEREVENT + 2
+pygame.time.set_timer(SPAWN_ENEMY_EVENT, 2000)
 
 # 2. GAME CLASSES
 
@@ -153,6 +178,46 @@ class Token:
         # Center purple dot
         pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, 2)
 
+class Token:
+    """token with scatter and magnetic attraction mechanics."""
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 8
+        self.rect = pygame.Rect(x - self.radius, y - self.radius, self.radius * 2, self.radius * 2)
+        
+        # Initial scatter burst velocity when dropping
+        self.vx = random.uniform(-4, 4)
+        self.vy = random.uniform(-4, 4)
+        self.friction = 0.88  # Slows down initial scatter
+        
+        # Magnetism Parameters
+        self.magnet_distance = 150  # Pull distance in pixels
+        self.magnet_speed = 0.8     # Acceleration toward Jack
+
+    def update(self, player_rect):
+        dx = player_rect.centerx - self.x
+        dy = player_rect.centery - self.y
+        dist = math.hypot(dx, dy)
+
+        # MAGNETIC EFFECT: Pull token toward Jack if inside range
+        if dist < self.magnet_distance and dist > 0:
+            self.vx += (dx / dist) * self.magnet_speed
+            self.vy += (dy / dist) * self.magnet_speed
+        else:
+            self.vx *= self.friction
+            self.vy *= self.friction
+
+        self.x += self.vx
+        self.y += self.vy
+        self.rect.center = (int(self.x), int(self.y))
+
+    def draw(self, surface):
+        pos = (int(self.x), int(self.y))
+        pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, self.radius)
+        pygame.draw.circle(surface, COLOR_TOKEN_INNER, pos, self.radius - 3)
+        pygame.draw.circle(surface, COLOR_TOKEN_OUTER, pos, 2)
+
 class Player:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 32, 32)
@@ -268,12 +333,16 @@ while running:
 
                     if current_card == "SPADE":
                         projectiles.append(SpadeProjectile(player.rect.centerx, player.rect.centery, player.angle))
+                        SOUND_SPADE.play()
                     elif current_card == "HEART":
                         player.use_heart_shield()
+                        SOUND_HEART.play()
                     elif current_card == "CLUB":
                         slashes.append(ClubSlash(player.rect.centerx, player.rect.centery, player.angle))
+                        SOUND_CLUB.play()
                     elif current_card == "DIAMOND":
                         player.use_diamond_dash(keys)
+                        SOUND_DIAMOND.play()
 
             # Reset charge state on release
             is_charging = False
@@ -293,6 +362,7 @@ while running:
 
                 # Spawn active laser beam
                 active_lasers.append(LaserBeam(player))
+                SOUND_LASER.play()
 
                 # Reset charging state
                 is_charging = False
@@ -324,13 +394,25 @@ while running:
         if slash.lifetime <= 0:
             slashes.remove(slash)
 
+    # Update Tokens & Player Collection (With Magnetism)
+    for token in tokens[:]:
+        token.update(player.rect)
+        if player.rect.colliderect(token.rect):
+            player_tokens += 1
+            tokens.remove(token)
+
     # --- RENDERING ---
     screen.fill(COLOR_BG)
+    # Render Active Lasers
     for laser in active_lasers:
         laser.draw(screen)
-
+    # Render Slashes
     for slash in slashes:
         slash.draw(screen)
+
+    # Render Tokens
+    for token in tokens:
+        token.draw(screen)
 
     player.draw(screen)
     # --- DRAW CHARGING INDICATOR CIRCLE ---
@@ -344,6 +426,14 @@ while running:
     for token in tokens:
         token.draw(screen)
 
+    # --- DRAW CHARGING INDICATOR CIRCLE ---
+    if is_charging and charge_timer > 0:
+        charge_ratio = charge_timer / CHARGE_REQ
+        pygame.draw.circle(screen, (80, 80, 80), player.rect.center, 36, width=2)
+        fill_radius = int(36 * charge_ratio)
+        if fill_radius > 0:
+            pygame.draw.circle(screen, COLOR_LASER, player.rect.center, fill_radius, width=2)
+            
     for proj in projectiles:
         proj.draw(screen)
 
@@ -366,6 +456,16 @@ while running:
         # Render text name inside card
         card_txt = font.render(suit[:4], True, card_color)
         screen.blit(card_txt, (box_rect.x + 5, box_rect.y + 16))
+
+ # --- DRAW TOKEN COUNTER (TOP-RIGHT) ---
+    token_str = f"TOKENS: {player_tokens}"
+    token_surf = font.render(token_str, True, COLOR_TOKEN_INNER)
+    token_rect = token_surf.get_rect(topright=(WIDTH - 20, 20))
+    
+    bg_box = token_rect.inflate(12, 8)
+    pygame.draw.rect(screen, (10, 10, 20), bg_box, border_radius=4)
+    pygame.draw.rect(screen, COLOR_TOKEN_OUTER, bg_box, width=2, border_radius=4)
+    screen.blit(token_surf, token_rect)
 
     # Draw Mouse Cursor
     pygame.draw.circle(screen, (255, 255, 255), mouse_pos, 5, width=1)
